@@ -222,3 +222,36 @@ test('shows the reason given for a change', async ({ page }) => {
     '— raised — customer impact',
   );
 });
+
+test('resizes the peek panel by dragging its border, and remembers the width', async ({ page }) => {
+  const key = await apiCreateIssue(page.request, { title: 'Resize the panel' });
+  await openList(page);
+  await row(page, key).getByRole('button', { name: 'Resize the panel' }).click();
+  const panel = page.getByTestId('peek-panel');
+  const handle = panel.getByTestId('peek-resize');
+  await expect(panel).toBeVisible();
+  const start = (await panel.boundingBox())!;
+  expect(Math.round(start.width)).toBe(600);
+
+  // Drag the left border 200px to the left: the panel grows by as much.
+  const grip = (await handle.boundingBox())!;
+  const y = grip.y + grip.height / 2;
+  await page.mouse.move(grip.x + grip.width / 2, y);
+  await page.mouse.down();
+  await page.mouse.move(grip.x + grip.width / 2 - 200, y, { steps: 5 });
+  await page.mouse.up();
+  await expect.poll(async () => Math.round((await panel.boundingBox())!.width)).toBe(800);
+  await expect(handle).toHaveAttribute('aria-valuenow', '800');
+
+  // The keyboard moves it too, and the width survives a reload.
+  await handle.focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(handle).toHaveAttribute('aria-valuenow', '768');
+  await page.reload();
+  await row(page, key).getByRole('button', { name: 'Resize the panel' }).click();
+  await expect.poll(async () => Math.round((await panel.boundingBox())!.width)).toBe(768);
+
+  // Double-clicking the border resets it.
+  await handle.dblclick();
+  await expect.poll(async () => Math.round((await panel.boundingBox())!.width)).toBe(600);
+});

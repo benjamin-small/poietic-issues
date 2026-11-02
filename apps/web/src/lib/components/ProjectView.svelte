@@ -27,6 +27,16 @@
   import IssueList from './IssueList.svelte';
   import ViewConfigPanel from './ViewConfigPanel.svelte';
   import ViewMenu from './ViewMenu.svelte';
+  import {
+    clampPeekWidth,
+    loadPeekWidth,
+    maxPeekWidth,
+    PEEK_DEFAULT,
+    PEEK_GUTTER,
+    PEEK_MIN,
+    PEEK_STEP,
+    savePeekWidth,
+  } from '../peek-width.ts';
 
   /**
    * A project's issues through a view: the saved view's config, overridden by an unsaved `?v=` config in the URL
@@ -91,6 +101,53 @@
   function closePeek() {
     history.back();
   }
+
+  // The peek panel's width (sm and up): dragged by its left border or moved with the arrow keys, remembered per browser.
+  let peekWidth = $state(loadPeekWidth());
+  let resizing = $state(false);
+  let container: HTMLDivElement | undefined = $state();
+  let aside: HTMLElement | undefined = $state();
+  const peekMax = () => maxPeekWidth(container?.clientWidth ?? Infinity);
+  function setPeekWidth(width: number, save = false) {
+    peekWidth = clampPeekWidth(width, peekMax());
+    if (save) savePeekWidth(peekWidth);
+  }
+  function startResize(e: PointerEvent) {
+    if (e.button !== 0 || !aside) return;
+    e.preventDefault();
+    const handle = e.currentTarget as HTMLElement;
+    handle.setPointerCapture(e.pointerId);
+    // Relative to where the drag began, so grabbing anywhere on the handle doesn't make the panel jump.
+    const startWidth = aside.getBoundingClientRect().width;
+    const startX = e.clientX;
+    resizing = true;
+    const move = (ev: PointerEvent) => setPeekWidth(startWidth + startX - ev.clientX);
+    const end = () => {
+      resizing = false;
+      savePeekWidth(peekWidth);
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', end);
+      handle.removeEventListener('pointercancel', end);
+    };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', end);
+    handle.addEventListener('pointercancel', end);
+  }
+  function resizeByKey(e: KeyboardEvent) {
+    const next =
+      e.key === 'ArrowLeft'
+        ? peekWidth + PEEK_STEP
+        : e.key === 'ArrowRight'
+          ? peekWidth - PEEK_STEP
+          : e.key === 'Home'
+            ? PEEK_MIN
+            : e.key === 'End'
+              ? peekMax()
+              : null;
+    if (next === null) return;
+    e.preventDefault();
+    setPeekWidth(next, true);
+  }
 </script>
 
 <div class="flex h-full min-h-0 flex-col">
@@ -132,7 +189,7 @@
     </header>
   {/if}
 
-  <div class="relative flex min-h-0 flex-1">
+  <div class="relative flex min-h-0 flex-1" class:select-none={resizing} bind:this={container}>
     {#if project.notFound}
       <EmptyState icon={FolderX} title="Project {projectKey} not found" testid="project-not-found">
         {project.signedIn
@@ -212,9 +269,29 @@
 
     {#if peek}
       <aside
-        class="absolute inset-y-0 right-0 z-20 w-full border-border bg-bg shadow-xl sm:w-[min(600px,100%)] sm:border-l"
+        class="absolute inset-y-0 right-0 z-20 w-full border-border bg-bg shadow-xl sm:w-(--peek-width) sm:border-l"
+        style:--peek-width="min({peekWidth}px, max({PEEK_MIN}px, 100% - {PEEK_GUTTER}px), 100%)"
         data-testid="peek-panel"
+        bind:this={aside}
       >
+        <!-- A focusable separator is the ARIA window-splitter pattern, which Svelte's a11y rules don't know. -->
+        <!-- svelte-ignore a11y_no_noninteractive_element_interactions, a11y_no_noninteractive_tabindex -->
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize issue panel"
+          aria-valuenow={peekWidth}
+          aria-valuemin={PEEK_MIN}
+          aria-valuemax={peekMax()}
+          tabindex="0"
+          title="Drag to resize; double-click to reset"
+          class="absolute inset-y-0 -left-1 z-10 hidden w-2 cursor-col-resize touch-none outline-none after:absolute after:inset-y-0 after:left-1/2 after:w-px after:-translate-x-1/2 after:bg-transparent after:transition-colors hover:after:bg-accent focus-visible:after:bg-accent data-[resizing]:after:bg-accent sm:block"
+          data-resizing={resizing || undefined}
+          data-testid="peek-resize"
+          onpointerdown={startResize}
+          onkeydown={resizeByKey}
+          ondblclick={() => setPeekWidth(PEEK_DEFAULT, true)}
+        ></div>
         {#key peek}
           <IssueDetail issueKey={peek} onopen={open} onclose={closePeek} panel />
         {/key}
