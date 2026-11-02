@@ -1,6 +1,6 @@
 {
   "name": "@poietic-tech/issues",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "The poietic-tech issues module: the issue tracker at issues.poietic.tech, from the poietic-tech command line.",
   "license": "MIT",
   "type": "module",
