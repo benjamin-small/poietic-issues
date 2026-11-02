@@ -130,4 +130,49 @@ describe('Runner', () => {
     controller.abort();
     await running;
   });
+
+  it('backs off the tracker poll while idle and returns to the base interval on new events', async () => {
+    vi.useFakeTimers();
+    try {
+      const log: TrackerEvent[] = [];
+      const polls: number[] = [];
+      const tracker = {
+        events: vi.fn(async (after: number) => {
+          polls.push(Date.now());
+          return { data: log.filter((e) => e.seq > after), nextCursor: null };
+        }),
+      } as unknown as Tracker;
+      const controller = new AbortController();
+      const runner = new Runner({
+        bridge: { terminals: { list: async () => [] } } as unknown as RunnerOptions['bridge'],
+        tracker,
+        store: new Store(':memory:'),
+        sync: { rebuild: async () => 0, onTracker: async () => {} } as unknown as Sync,
+        log: silentLogger,
+        subscription: 'issues-sync',
+        discoveryMs: 600_000,
+        trackerPollMs: 100,
+        trackerIdleMaxMs: 400,
+        signal: controller.signal,
+      });
+      const running = runner.run();
+      // The first two calls find the head; then the loop polls.
+      await vi.advanceTimersByTimeAsync(0);
+      const start = polls.length;
+      await vi.advanceTimersByTimeAsync(100 + 200 + 400 + 400);
+      const gaps = polls
+        .slice(start - 1)
+        .map((t, i, a) => (i ? t - a[i - 1]! : 0))
+        .slice(1);
+      expect(gaps).toEqual([100, 200, 400, 400]);
+      log.push({ seq: 1, type: 'issue.created' } as TrackerEvent);
+      await vi.advanceTimersByTimeAsync(400 + 100 + 100);
+      const after = polls.slice(-3);
+      expect([after[1]! - after[0]!, after[2]! - after[1]!]).toEqual([100, 100]);
+      controller.abort();
+      await running;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
