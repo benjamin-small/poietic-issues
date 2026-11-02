@@ -56,6 +56,10 @@
           ? 'none'
           : String(v);
 
+  /** The one-line reason the change was made with (`X-Change-Reason`), if any. */
+  const reasonOf = (e: TrackerEvent): string | undefined =>
+    typeof e.data.reason === 'string' ? e.data.reason : undefined;
+
   function describe(e: TrackerEvent): string[] {
     const data = e.data as {
       changes?: Record<string, Change>;
@@ -179,7 +183,10 @@
               ><span class="text-fg-muted"
                 >{entry.event.actor ? formatActor(entry.event.actor) : 'Someone'}</span
               >
-              {line}</span
+              {line}{#if i === 0 && reasonOf(entry.event)}
+                <span class="text-fg-muted" data-testid="change-reason"
+                  >— {reasonOf(entry.event)}</span
+                >{/if}</span
             >
             <span title={entry.at}>· {relativeTime(entry.at)}</span>
           </li>

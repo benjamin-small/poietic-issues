@@ -18,7 +18,11 @@ export async function recordEvent(
   type: EventType,
   input: RecordEventInput,
 ): Promise<void> {
-  const data = ctx.requestId ? { ...input.data, requestId: ctx.requestId } : input.data;
+  const data = {
+    ...input.data,
+    ...(ctx.requestId && { requestId: ctx.requestId }),
+    ...(ctx.reason && { reason: ctx.reason }),
+  };
   await tx
     .insertInto('events')
     .values({

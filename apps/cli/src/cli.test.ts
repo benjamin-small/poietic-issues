@@ -383,7 +383,9 @@ describe(`tracker CLI (${testDialect()})`, () => {
     const id = /Created webhook (whk_\w+)/.exec(created.stdout)![1]!;
 
     const listed = await cli(['webhook', 'ls']);
-    expect(listed.stdout.split('\n')[0]).toMatch(/^ID\s+URL\s+EVENTS\s+ACTIVE\s+DESCRIPTION$/);
+    expect(listed.stdout.split('\n')[0]).toMatch(
+      /^ID\s+URL\s+EVENTS\s+ACTIVE\s+PAYLOAD\s+DESCRIPTION$/,
+    );
     expect(listed.stdout).toContain('issue.*,comment.created');
 
     const edited = await cli(['webhook', 'edit', id, '--scope', 'all', '--disable', '--json']);
@@ -403,6 +405,49 @@ describe(`tracker CLI (${testDialect()})`, () => {
     expect(ping.code).toBe(6);
     expect(ping.stderr).toMatch(/ECONNREFUSED/);
     expect((await cli(['webhook', 'rm', id])).stdout).toBe(`Deleted webhook ${id}\n`);
+
+    const notice = await cli([
+      'webhook',
+      'create',
+      'https://example.com/notices',
+      '--payload',
+      'notice',
+      '--json',
+    ]);
+    expect(notice.json()).toMatchObject({ payload: 'notice' });
+    const full = await cli(['webhook', 'edit', notice.json().id, '--payload', 'full', '--json']);
+    expect(full.json()).toMatchObject({ payload: 'full' });
+    expect(
+      (await cli(['webhook', 'create', 'https://example.com/x', '--payload', 'all'])).code,
+    ).toBe(2);
+
+    const secret = 'whsec_AwoRGB8mLTQ7QklQV15lbHN6gYiPlp2kq7K5wMfO1dw=';
+    const supplied = await cli(
+      ['webhook', 'create', 'https://example.com/bridge', '--secret-stdin', '--json'],
+      { stdin: `${secret}\n` },
+    );
+    expect(supplied.code).toBe(0);
+    // The caller already holds a supplied secret: it is never printed back.
+    expect(supplied.json()).toMatchObject({ url: 'https://example.com/bridge' });
+    expect(supplied.stdout).not.toContain(secret);
+    const human = await cli(
+      ['webhook', 'create', 'https://example.com/bridge2', '--secret-stdin'],
+      {
+        stdin: secret,
+      },
+    );
+    expect(human.code).toBe(0);
+    expect(human.stdout + human.stderr).not.toContain(secret);
+    expect(human.stdout).toMatch(/whk_/);
+    const empty = await cli(['webhook', 'create', 'https://example.com/y', '--secret-stdin'], {
+      stdin: '',
+    });
+    expect(empty.code).toBe(2);
+    const bad = await cli(['webhook', 'create', 'https://example.com/z', '--secret-stdin'], {
+      stdin: 'whsec_tooshort=',
+    });
+    expect(bad.code).toBe(2);
+    expect(bad.stderr).not.toContain('tooshort');
   });
 });
 

@@ -205,3 +205,20 @@ test('deletes to the trash and restores', async ({ page }) => {
   await openList(page);
   await expect(row(page, key)).toBeVisible();
 });
+
+test('shows the reason given for a change', async ({ page }) => {
+  await openList(page);
+  const key = await apiCreateIssue(page.request, { title: 'Needs a reason' });
+  const res = await page.request.patch(`/api/v1/issues/${key}`, {
+    data: { priority: 1 },
+    headers: {
+      origin: `http://127.0.0.1:${process.env.E2E_PORT ?? 3100}`,
+      'x-change-reason': encodeURIComponent('raised — customer impact'),
+    },
+  });
+  expect(res.ok(), await res.text()).toBe(true);
+  await page.goto(`/i/${key}`);
+  await expect(page.getByTestId('activity').getByTestId('change-reason')).toHaveText(
+    '— raised — customer impact',
+  );
+});

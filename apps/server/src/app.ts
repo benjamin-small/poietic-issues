@@ -11,7 +11,7 @@ import {
   SESSION_COOKIE,
   type TrackerApp,
 } from './env.ts';
-import { authenticate, requestId, requireActor } from './middleware/auth.ts';
+import { authenticate, changeReason, requestId, requireActor } from './middleware/auth.ts';
 import { idempotency } from './middleware/idempotency.ts';
 import { silentLogger } from './logger.ts';
 import { sql } from '@poietic-tech/issues-db';
@@ -130,6 +130,7 @@ export function createApp(deps: AppDeps = {}): OpenAPIHono<AppEnv> {
   root.onError((error, c) => problemFromError(c, error));
   const logger = deps.logger ?? silentLogger;
   root.use('*', requestId);
+  root.use('*', changeReason);
   // Access log (health probes and static assets only at debug level).
   root.use('*', async (c, next) => {
     const started = performance.now();

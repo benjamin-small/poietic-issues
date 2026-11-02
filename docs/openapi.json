@@ -196,6 +196,55 @@
           "handle"
         ]
       },
+      "EventNotice": {
+        "type": "object",
+        "properties": {
+          "seq": {
+            "type": "integer",
+            "description": "Read `GET /events?after=<seq - 1>` for the event."
+          },
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "example": "issue.updated"
+          },
+          "projectId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "issueId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "actorId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO-8601 UTC timestamp.",
+            "example": "2026-09-26T13:49:00.123Z"
+          }
+        },
+        "required": [
+          "seq",
+          "id",
+          "type",
+          "projectId",
+          "issueId",
+          "actorId",
+          "createdAt"
+        ]
+      },
       "AuthConfig": {
         "type": "object",
         "properties": {
@@ -2696,6 +2745,14 @@
           "active": {
             "type": "boolean"
           },
+          "payload": {
+            "type": "string",
+            "enum": [
+              "full",
+              "notice"
+            ],
+            "description": "`full` sends the event as in `GET /events`; `notice` sends only its seq, ids, type and time."
+          },
           "failureCount": {
             "type": "integer",
             "description": "Consecutive deliveries that exhausted their retries. The webhook is disabled at 5; re-activating resets it."
@@ -2732,6 +2789,7 @@
           "eventTypes",
           "projectId",
           "active",
+          "payload",
           "failureCount",
           "disabledAt",
           "createdBy",
@@ -2767,6 +2825,14 @@
           },
           "active": {
             "type": "boolean"
+          },
+          "payload": {
+            "type": "string",
+            "enum": [
+              "full",
+              "notice"
+            ],
+            "description": "`full` sends the event as in `GET /events`; `notice` sends only its seq, ids, type and time."
           },
           "failureCount": {
             "type": "integer",
@@ -2809,6 +2875,7 @@
           "eventTypes",
           "projectId",
           "active",
+          "payload",
           "failureCount",
           "disabledAt",
           "createdBy",
@@ -2850,6 +2917,19 @@
           "active": {
             "type": "boolean",
             "default": true
+          },
+          "payload": {
+            "type": "string",
+            "enum": [
+              "full",
+              "notice"
+            ],
+            "default": "full",
+            "description": "`full` sends the event as in `GET /events`; `notice` sends only its seq, ids, type and time."
+          },
+          "secret": {
+            "type": "string",
+            "description": "Signing secret to use instead of a generated one, for receivers that issue their own (such as the bridge): `whsec_` and standard base64 of 16–64 bytes."
           }
         },
         "required": [
@@ -2886,6 +2966,14 @@
           },
           "active": {
             "type": "boolean"
+          },
+          "payload": {
+            "type": "string",
+            "enum": [
+              "full",
+              "notice"
+            ],
+            "description": "`full` sends the event as in `GET /events`; `notice` sends only its seq, ids, type and time."
           }
         }
       },
@@ -9016,6 +9104,102 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/Event"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Any 2xx acknowledges the delivery."
+          }
+        }
+      }
+    },
+    "notice": {
+      "post": {
+        "tags": [
+          "Webhooks"
+        ],
+        "summary": "Tracker event notice",
+        "description": "Sent instead of `event` when the webhook's `payload` is `notice`: only which event happened (its seq, ids, type and time), never what it contains. Read `GET /events` as yourself for the event. Signing, headers, retries and deduplication are as for `event`; the test ping is a notice with `seq` 0 and `type` `webhook.ping`.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "whd_01h455vb4pex5vsknk084sn02q"
+            },
+            "required": true,
+            "name": "webhook-id",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Unix seconds.",
+              "example": "1790445358"
+            },
+            "required": true,
+            "description": "Unix seconds.",
+            "name": "webhook-timestamp",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Space-separated `v1,<base64>` signatures."
+            },
+            "required": true,
+            "description": "Space-separated `v1,<base64>` signatures.",
+            "name": "webhook-signature",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "example": "issue.updated"
+            },
+            "required": true,
+            "name": "x-poietic-issues-event",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "example": "1042"
+            },
+            "required": true,
+            "name": "x-poietic-issues-event-seq",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Deprecated: same as `x-poietic-issues-event`.",
+              "deprecated": true
+            },
+            "required": true,
+            "description": "Deprecated: same as `x-poietic-issues-event`.",
+            "name": "x-tracker-event",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Deprecated: same as `x-poietic-issues-event-seq`.",
+              "deprecated": true
+            },
+            "required": true,
+            "description": "Deprecated: same as `x-poietic-issues-event-seq`.",
+            "name": "x-tracker-event-seq",
+            "in": "header"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventNotice"
               }
             }
           }

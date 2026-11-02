@@ -1695,6 +1695,20 @@
           "description": "create it disabled",
           "required": false,
           "takesValue": false
+        },
+        {
+          "flags": "--payload <payload>",
+          "name": "payload",
+          "description": "what to send: full (the event, default) or notice (only its seq, ids and type)",
+          "required": false,
+          "takesValue": true
+        },
+        {
+          "flags": "--secret-stdin",
+          "name": "secretStdin",
+          "description": "read a supplied signing secret (whsec_…) from stdin instead of generating one",
+          "required": false,
+          "takesValue": false
         }
       ]
     },
@@ -1766,6 +1780,13 @@
           "description": "deactivate",
           "required": false,
           "takesValue": false
+        },
+        {
+          "flags": "--payload <payload>",
+          "name": "payload",
+          "description": "what to send: full (the event) or notice (only its seq, ids and type)",
+          "required": false,
+          "takesValue": true
         }
       ]
     },

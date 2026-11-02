@@ -5377,6 +5377,59 @@ export interface webhooks {
         patch?: never;
         trace?: never;
     };
+    notice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Tracker event notice
+         * @description Sent instead of `event` when the webhook's `payload` is `notice`: only which event happened (its seq, ids, type and time), never what it contains. Read `GET /events` as yourself for the event. Signing, headers, retries and deduplication are as for `event`; the test ping is a notice with `seq` 0 and `type` `webhook.ping`.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    "webhook-id": string;
+                    /** @description Unix seconds. */
+                    "webhook-timestamp": string;
+                    /** @description Space-separated `v1,<base64>` signatures. */
+                    "webhook-signature": string;
+                    "x-poietic-issues-event": string;
+                    "x-poietic-issues-event-seq": string;
+                    /** @description Deprecated: same as `x-poietic-issues-event`. */
+                    "x-tracker-event": string;
+                    /** @description Deprecated: same as `x-poietic-issues-event-seq`. */
+                    "x-tracker-event-seq": string;
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["EventNotice"];
+                };
+            };
+            responses: {
+                /** @description Any 2xx acknowledges the delivery. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export interface components {
     schemas: {
@@ -5422,6 +5475,22 @@ export interface components {
             id: string;
             /** @example ada */
             handle: string;
+        };
+        EventNotice: {
+            /** @description Read `GET /events?after=<seq - 1>` for the event. */
+            seq: number;
+            id: string;
+            /** @example issue.updated */
+            type: string;
+            projectId: string | null;
+            issueId: string | null;
+            actorId: string | null;
+            /**
+             * Format: date-time
+             * @description ISO-8601 UTC timestamp.
+             * @example 2026-09-26T13:49:00.123Z
+             */
+            createdAt: string;
         };
         AuthConfig: {
             /** @description Whether passwordless dev login is enabled (development only). */
@@ -6513,6 +6582,11 @@ export interface components {
             /** @description Only events from this project; null for all projects. */
             projectId: string | null;
             active: boolean;
+            /**
+             * @description `full` sends the event as in `GET /events`; `notice` sends only its seq, ids, type and time.
+             * @enum {string}
+             */
+            payload: "full" | "notice";
             /** @description Consecutive deliveries that exhausted their retries. The webhook is disabled at 5; re-activating resets it. */
             failureCount: number;
             /**
@@ -6544,6 +6618,11 @@ export interface components {
             /** @description Only events from this project; null for all projects. */
             projectId: string | null;
             active: boolean;
+            /**
+             * @description `full` sends the event as in `GET /events`; `notice` sends only its seq, ids, type and time.
+             * @enum {string}
+             */
+            payload: "full" | "notice";
             /** @description Consecutive deliveries that exhausted their retries. The webhook is disabled at 5; re-activating resets it. */
             failureCount: number;
             /**
@@ -6592,6 +6671,14 @@ export interface components {
             project?: string;
             /** @default true */
             active?: boolean;
+            /**
+             * @description `full` sends the event as in `GET /events`; `notice` sends only its seq, ids, type and time.
+             * @default full
+             * @enum {string}
+             */
+            payload?: "full" | "notice";
+            /** @description Signing secret to use instead of a generated one, for receivers that issue their own (such as the bridge): `whsec_` and standard base64 of 16–64 bytes. */
+            secret?: string;
         };
         UpdateWebhookInput: {
             /**
@@ -6604,6 +6691,11 @@ export interface components {
             /** @description null removes the scope. */
             project?: string | null;
             active?: boolean;
+            /**
+             * @description `full` sends the event as in `GET /events`; `notice` sends only its seq, ids, type and time.
+             * @enum {string}
+             */
+            payload?: "full" | "notice";
         };
         WebhookTestResult: {
             ok: boolean;
@@ -6671,6 +6763,7 @@ export interface components {
 export type Event = components['schemas']['Event'];
 export type UserSummary = components['schemas']['UserSummary'];
 export type UserOwner = components['schemas']['UserOwner'];
+export type EventNotice = components['schemas']['EventNotice'];
 export type AuthConfig = components['schemas']['AuthConfig'];
 export type User = components['schemas']['User'];
 export type Problem = components['schemas']['Problem'];

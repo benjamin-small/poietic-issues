@@ -14,6 +14,7 @@ import {
 } from '@poietic-tech/issues-core';
 import {
   CreateWebhookInputSchema,
+  EventNoticeSchema,
   EventSchema,
   pageOf,
   UpdateWebhookInputSchema,
@@ -196,6 +197,25 @@ export function registerWebhookRoutes(app: TrackerApp, policy: WebhookPolicy) {
   );
 
   // The outgoing payload, documented in the OpenAPI `webhooks` section (so clients can generate its types).
+  const deliveryHeaders = z.object({
+    'webhook-id': z.string().openapi({ example: 'whd_01h455vb4pex5vsknk084sn02q' }),
+    'webhook-timestamp': z
+      .string()
+      .openapi({ description: 'Unix seconds.', example: '1790445358' }),
+    'webhook-signature': z
+      .string()
+      .openapi({ description: 'Space-separated `v1,<base64>` signatures.' }),
+    'x-poietic-issues-event': z.string().openapi({ example: 'issue.updated' }),
+    'x-poietic-issues-event-seq': z.string().openapi({ example: '1042' }),
+    'x-tracker-event': z.string().openapi({
+      description: 'Deprecated: same as `x-poietic-issues-event`.',
+      deprecated: true,
+    }),
+    'x-tracker-event-seq': z.string().openapi({
+      description: 'Deprecated: same as `x-poietic-issues-event-seq`.',
+      deprecated: true,
+    }),
+  });
   app.openAPIRegistry.registerWebhook({
     method: 'post',
     path: 'event',
@@ -204,27 +224,19 @@ export function registerWebhookRoutes(app: TrackerApp, policy: WebhookPolicy) {
     description:
       'Every delivery POSTs one event (the same shape as `GET /events`) as JSON. Verify `webhook-signature` (Standard Webhooks: HMAC-SHA256 over `{webhook-id}.{webhook-timestamp}.{body}` with the base64-decoded part of the `whsec_` secret) and reject timestamps older than a few minutes. `webhook-id` is stable across retries of the same delivery — use it to deduplicate. Answer 2xx within 10 seconds; anything else is retried after 1m, 5m, 30m, 2h and 12h.',
     request: {
-      headers: z.object({
-        'webhook-id': z.string().openapi({ example: 'whd_01h455vb4pex5vsknk084sn02q' }),
-        'webhook-timestamp': z
-          .string()
-          .openapi({ description: 'Unix seconds.', example: '1790445358' }),
-        'webhook-signature': z
-          .string()
-          .openapi({ description: 'Space-separated `v1,<base64>` signatures.' }),
-        'x-poietic-issues-event': z.string().openapi({ example: 'issue.updated' }),
-        'x-poietic-issues-event-seq': z.string().openapi({ example: '1042' }),
-        'x-tracker-event': z.string().openapi({
-          description: 'Deprecated: same as `x-poietic-issues-event`.',
-          deprecated: true,
-        }),
-        'x-tracker-event-seq': z.string().openapi({
-          description: 'Deprecated: same as `x-poietic-issues-event-seq`.',
-          deprecated: true,
-        }),
-      }),
+      headers: deliveryHeaders,
       body: jsonBody(EventSchema),
     },
+    responses: { 200: { description: 'Any 2xx acknowledges the delivery.' } },
+  });
+  app.openAPIRegistry.registerWebhook({
+    method: 'post',
+    path: 'notice',
+    tags,
+    summary: 'Tracker event notice',
+    description:
+      "Sent instead of `event` when the webhook's `payload` is `notice`: only which event happened (its seq, ids, type and time), never what it contains. Read `GET /events` as yourself for the event. Signing, headers, retries and deduplication are as for `event`; the test ping is a notice with `seq` 0 and `type` `webhook.ping`.",
+    request: { headers: deliveryHeaders, body: jsonBody(EventNoticeSchema) },
     responses: { 200: { description: 'Any 2xx acknowledges the delivery.' } },
   });
 }

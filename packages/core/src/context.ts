@@ -30,6 +30,8 @@ export interface ServiceContext {
   ids: IdGenerator;
   /** Correlates events with the request that caused them (echoed in event payloads). */
   requestId?: string;
+  /** Why the change was made (one line, from `X-Change-Reason`), stored on the events it causes. */
+  reason?: string;
 }
 
 export const systemClock: Clock = { now: () => new Date() };

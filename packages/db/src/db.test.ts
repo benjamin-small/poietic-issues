@@ -299,6 +299,8 @@ describe(`migrations (${dialect})`, () => {
   it('migrate down removes everything and migrate up restores it', async () => {
     const db = await createTestDb();
     try {
+      expect(await migrateDown(db)).toEqual(['0008_webhook_payload']);
+      await expect(sql`select payload from webhooks`.execute(db.kysely)).rejects.toThrow();
       expect(await migrateDown(db)).toEqual(['0007_drop_api_tokens']);
       expect(
         (await sql`select count(*) as n from api_tokens`.execute(db.kysely)).rows,
@@ -324,6 +326,7 @@ describe(`migrations (${dialect})`, () => {
         '0005_user_owner',
         '0006_end_sso_users_sessions',
         '0007_drop_api_tokens',
+        '0008_webhook_payload',
       ]);
       expect(await migrateToLatest(db)).toEqual([
         '0001_init',
@@ -333,6 +336,7 @@ describe(`migrations (${dialect})`, () => {
         '0005_user_owner',
         '0006_end_sso_users_sessions',
         '0007_drop_api_tokens',
+        '0008_webhook_payload',
       ]);
       expect((await migrationStatus(db)).upToDate).toBe(true);
     } finally {
@@ -343,6 +347,7 @@ describe(`migrations (${dialect})`, () => {
   it('0004 makes active non-admin users editors of existing projects', async () => {
     const db = await createTestDb();
     try {
+      await migrateDown(db);
       await migrateDown(db);
       await migrateDown(db);
       await migrateDown(db);
@@ -389,6 +394,7 @@ describe(`migrations (${dialect})`, () => {
       await migrateDown(db);
       await migrateDown(db);
       await migrateDown(db);
+      await migrateDown(db);
       await migrateDown(db); // back to 0003
       const ts = '2026-01-01T00:00:00.000Z';
       // Even a system user whose role is `member` (the built-in one is an admin) must be skipped.
@@ -417,6 +423,7 @@ describe(`migration 0006 (${dialect})`, () => {
     const db = await createTestDb();
     try {
       await migrateDown(db);
+      await migrateDown(db);
       await migrateDown(db); // back to 0005
       const ts = '2026-01-01T00:00:00.000Z';
       const later = '2026-02-01T00:00:00.000Z';
@@ -437,6 +444,7 @@ describe(`migration 0006 (${dialect})`, () => {
       expect(await migrateToLatest(db)).toEqual([
         '0006_end_sso_users_sessions',
         '0007_drop_api_tokens',
+        '0008_webhook_payload',
       ]);
       const rows = await sql<{ id: string }>`select id from sessions order by id`.execute(
         db.kysely,

@@ -1,21 +1,35 @@
 {
   "name": "@poietic-tech/issues-client",
-  "version": "0.0.0",
-  "private": true,
-  "description": "Typed API client generated from the OpenAPI document.",
+  "version": "0.1.0",
+  "description": "Typed client for the poietic-issues tracker API, with an event follower, change reasons and field provenance for agents.",
+  "license": "MIT",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22.12"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/poietic-tech/poietic-issues.git",
+    "directory": "packages/client"
+  },
   "scripts": {
     "typecheck": "tsc -p .",
-    "gen": "openapi-typescript ../../docs/openapi.json -o src/generated/openapi.d.ts --root-types --root-types-no-schema-prefix --default-non-nullable false"
+    "gen": "openapi-typescript ../../docs/openapi.json -o src/generated/openapi.d.ts --root-types --root-types-no-schema-prefix --default-non-nullable false",
+    "build": "tsdown"
   },
   "dependencies": {
-    "@poietic-tech/issues-schema": "workspace:*",
     "openapi-fetch": "^0.17.0"
   },
   "devDependencies": {
+    "@poietic-tech/issues-schema": "workspace:*",
     "openapi-typescript": "^7.13.0"
   }
 }

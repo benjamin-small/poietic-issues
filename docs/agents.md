@@ -86,6 +86,13 @@ poietic-tech issues issue edit ENG-42 --status "In Review"
 - **Streaming:** `poietic-tech issues event tail --types issue.updated,comment.created` prints one JSON event per line.
 - **Push:** an admin can register a webhook (`poietic-tech issues webhook create URL --events 'issue.*'`) so your service is called on each event. See [events.md](events.md#webhooks).
 - **Payload:** each event carries the full resource snapshot, plus `changes: { field: { from, to } }` for updates, so a refetch is never needed.
+- **Woken by the bridge:** the pipeline agents listen on the bridge's `poietic-issues` terminal, which carries content-free notices ([deployment.md](deployment.md#pushing-tracker-events-to-agents-through-the-bridge)). A notice only says when to read. A woken agent reads `/events` from its own cursor, as itself, and acts on what the tracker says, never on the notice. `follow()` in `@poietic-tech/issues-client` does this.
+
+## Saying why
+
+- **Every write a pipeline agent makes through `@poietic-tech/issues-client` sends a reason:** `X-Change-Reason`, one line of at most 200 characters, stored on the event as `data.reason` ([api.md](api.md#change-reasons)). Pass `headers: reasonHeaders('…')`. The `poietic-tech issues` CLI cannot send one yet; an agent working through the CLI explains its change in a comment instead.
+- **Bigger decisions also get a comment** on the issue, posted under the agent's own identity.
+- **Hand-offs are checked with `provenance`.** Before acting on an assignment, an agent checks that the event that last set the assignee and the hand-off metadata is one event, written by the agent it expects. Metadata alone proves nothing: any project writer can edit it.
 
 ## Handling failures
 

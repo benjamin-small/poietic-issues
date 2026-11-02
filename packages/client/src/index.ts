@@ -3,6 +3,9 @@ import type { components, paths } from './generated/openapi.d.ts';
 
 export type { components, paths } from './generated/openapi.d.ts';
 export type * from './generated/openapi.d.ts';
+export * from './events.ts';
+export * from './follow.ts';
+export * from './history.ts';
 
 export type ApiClient = Client<paths>;
 export type Schemas = components['schemas'];

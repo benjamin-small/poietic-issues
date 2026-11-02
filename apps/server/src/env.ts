@@ -90,6 +90,8 @@ export interface ResolvedDeps extends Omit<AppDeps, 'db'> {
 export interface AppEnv {
   Variables: {
     requestId: string;
+    /** The write's one-line reason (`X-Change-Reason`), when it gave one. */
+    changeReason?: string;
     logger: Logger;
     actor: Actor | null;
     /** `identity`: an SSO identity token in the Authorization header (ADR 0023). */

@@ -23,6 +23,50 @@ export function webhookMatchesType(patterns: readonly string[], type: EventType 
   );
 }
 
+/** What a webhook sends: the whole event, or a content-free notice that it happened. */
+export const WEBHOOK_PAYLOADS = ['full', 'notice'] as const;
+export type WebhookPayload = (typeof WEBHOOK_PAYLOADS)[number];
+
+const WebhookPayloadSchema = z.enum(WEBHOOK_PAYLOADS).meta({
+  description:
+    '`full` sends the event as in `GET /events`; `notice` sends only its seq, ids, type and time.',
+});
+
+/** The body of a `notice` webhook: which event happened, never what it contains. */
+export const EventNoticeSchema = z
+  .object({
+    seq: z
+      .number()
+      .int()
+      .meta({ description: 'Read `GET /events?after=<seq - 1>` for the event.' }),
+    id: z.string(),
+    type: z.string().meta({ example: 'issue.updated' }),
+    projectId: z.string().nullable(),
+    issueId: z.string().nullable(),
+    actorId: z.string().nullable(),
+    createdAt: TimestampSchema,
+  })
+  .meta({ id: 'EventNotice' });
+export type EventNotice = z.infer<typeof EventNoticeSchema>;
+
+/** The notice for an event, with its keys in a fixed order. */
+export function toEventNotice(
+  event: Pick<
+    EventNotice,
+    'seq' | 'id' | 'type' | 'projectId' | 'issueId' | 'actorId' | 'createdAt'
+  >,
+): EventNotice {
+  return {
+    seq: event.seq,
+    id: event.id,
+    type: event.type,
+    projectId: event.projectId,
+    issueId: event.issueId,
+    actorId: event.actorId,
+    createdAt: event.createdAt,
+  };
+}
+
 const WEBHOOK_URL = z
   .url({ protocol: /^https?$/ })
   .max(2000)
@@ -39,6 +83,7 @@ export const WebhookSchema = z
       .nullable()
       .meta({ description: 'Only events from this project; null for all projects.' }),
     active: z.boolean(),
+    payload: WebhookPayloadSchema,
     failureCount: z.number().int().meta({
       description:
         'Consecutive deliveries that exhausted their retries. The webhook is disabled at 5; re-activating resets it.',
@@ -62,6 +107,34 @@ export const WebhookWithSecretSchema = WebhookSchema.extend({
 }).meta({ id: 'WebhookWithSecret' });
 export type WebhookWithSecret = z.infer<typeof WebhookWithSecretSchema>;
 
+const SECRET_PATTERN = /^whsec_((?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?)$/;
+
+/** Bytes encoded by canonical, padded base64 (its length says it all). */
+function base64Bytes(b64: string): number {
+  return (b64.length / 4) * 3 - (b64.match(/=+$/)?.[0].length ?? 0);
+}
+
+/**
+ * A supplied signing secret: `whsec_` and standard, padded base64 of 16–64 bytes. That is what the bridge (and any
+ * strict Standard Webhooks verifier) decodes, so a webhook can never hold a secret its receiver cannot check. The
+ * messages name the rule and never the value.
+ */
+export const WebhookSecretSchema = z
+  .string()
+  .refine(
+    (s) => {
+      const b64 = SECRET_PATTERN.exec(s)?.[1];
+      if (b64 === undefined) return false;
+      const bytes = base64Bytes(b64);
+      return bytes >= 16 && bytes <= 64;
+    },
+    { message: 'The secret must be whsec_ followed by standard, padded base64 of 16 to 64 bytes' },
+  )
+  .meta({
+    description:
+      'Signing secret to use instead of a generated one, for receivers that issue their own (such as the bridge): `whsec_` and standard base64 of 16–64 bytes.',
+  });
+
 export const CreateWebhookInputSchema = z
   .object({
     url: WEBHOOK_URL,
@@ -72,6 +145,8 @@ export const CreateWebhookInputSchema = z
       .optional()
       .meta({ description: 'Project key or id to scope the webhook to.', example: 'ENG' }),
     active: z.boolean().default(true),
+    payload: WebhookPayloadSchema.default('full'),
+    secret: WebhookSecretSchema.optional(),
   })
   .meta({ id: 'CreateWebhookInput' });
 export type CreateWebhookInput = z.input<typeof CreateWebhookInputSchema>;
@@ -83,6 +158,7 @@ export const UpdateWebhookInputSchema = z
     eventTypes: z.array(WebhookEventPatternSchema).min(1).optional(),
     project: z.string().nullable().optional().meta({ description: 'null removes the scope.' }),
     active: z.boolean().optional(),
+    payload: WebhookPayloadSchema.optional(),
   })
   .meta({ id: 'UpdateWebhookInput' });
 export type UpdateWebhookInput = z.input<typeof UpdateWebhookInputSchema>;

@@ -256,6 +256,7 @@ export interface WebhooksTable {
   created_at: Timestamp;
   updated_at: Timestamp;
   disabled_at: Timestamp | null;
+  payload: 'full' | 'notice';
 }
 
 export type WebhookDeliveryStatus = 'pending' | 'succeeded' | 'failed' | 'dead';

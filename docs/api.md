@@ -152,6 +152,19 @@ Every error is an [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) `applicatio
 
 Issues carry `version`, and responses include `ETag: "v<version>"`. Send `If-Match: "v<version>"`, or `expectedVersion` in the body, on `PATCH`, `DELETE` and `move` to fail with `412 VERSION_MISMATCH` instead of silently overwriting someone else's change. Omitting it means last-write-wins per field.
 
+## Change reasons
+
+Any write (`POST`, `PUT`, `PATCH`, `DELETE`) may carry a one-line reason, which is stored on the events it causes as `data.reason` ([events.md](events.md#event-shape)):
+
+```http
+X-Change-Reason: triaged%20as%20a%20bug%20%E2%80%94%20see%20ENG-12
+```
+
+- The value is percent-encoded UTF-8 (`encodeURIComponent`), because header values cannot hold non-ASCII text. Plain ASCII without `%` needs no encoding: `X-Change-Reason: triaged as a bug` works. A raw non-ASCII value (unencoded `café`) is refused rather than stored garbled.
+- After decoding it must be one line (no control characters or line separators) of at most 200 characters. A malformed, multi-line or longer reason is refused with `400 VALIDATION_FAILED`, and nothing is changed. A blank reason is no reason.
+- On reads the header is ignored.
+- People may leave it out. Agents always send it, by convention; `reasonHeaders(reason)` in `@poietic-tech/issues-client` builds it. A bigger decision also gets a comment on the issue.
+
 ## Idempotency
 
 `POST` requests accept `Idempotency-Key: <unique string>` (at most 255 characters, scoped to the actor, remembered for 24 hours):

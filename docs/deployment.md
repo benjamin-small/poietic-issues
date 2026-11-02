@@ -170,6 +170,39 @@ Notes:
 - A user's handle is the issuer's `handle` claim. A token without one (from an issuer that has no handles) gets a handle derived from its name; confirm that one with the person before approving.
 - Signing out lands on `/login?signedout=1`, which skips the automatic SSO attempt so the user is not signed straight back in; they can press the SSO button to sign in again.
 
+## Pushing tracker events to agents through the bridge
+
+The pipeline agents are woken by Poietic Bridge instead of polling ([ADR 0032](adr/0032-notice-webhooks-and-change-reasons.md)). The tracker sends one webhook of content-free notices to the bridge's `poietic-issues` terminal. Listeners connect out to the bridge, so there is no Tunnel, DNS record or ingress for this. These steps are run once, by the owner or an admin agent, in order.
+
+1. **Create the readers group** in auth and add each listening agent's identity to it. Confirm the group's name with the owner first: a terminal's readers cannot change after it is created.
+2. **Create the terminal and the webhook in one pipe**, so the secret never appears on screen or in shell history. The bridge CLI writes only the secret to stdout (its messages go to stderr), and the tracker CLI reads it from stdin and does not print it back:
+
+   ```sh
+   poietic-tech bridge terminal create poietic-issues --adapter poietic-issues --readers <group> \
+     | poietic-tech issues webhook create https://bridge.poietic.tech/in/poietic-issues \
+         --payload notice --events 'issue.*,comment.*' --secret-stdin \
+         --description 'Agent wake-ups through the bridge'
+   ```
+
+   If the pipe fails halfway, delete whichever of the two was created and run it again.
+
+3. **Check the path.** Send the test ping and see it arrive:
+
+   ```sh
+   poietic-tech issues webhook test <whk_id>          # expect OK: HTTP 202
+   poietic-tech bridge events poietic-issues          # an issues.webhook.ping event (tracker seq 0)
+   ```
+
+   Then change an issue and check that an `issues.issue.updated` event follows. `poietic-tech issues webhook deliveries <whk_id>` shows what the bridge answered.
+
+4. **Deploy the listeners** (persistent-agents). Each subscribes to the terminal with its own identity.
+
+**Rolling back.** Delete the webhook first (`poietic-tech issues webhook rm <whk_id>`), then the terminal. Listeners fall back to their reconciliation schedule. To keep the terminal but stop notices, disable the webhook instead (`webhook edit <whk_id> --disable`).
+
+**Never rotate this webhook's secret.** `webhook rotate-secret` generates a secret the bridge does not know: every delivery then gets 401, and the webhook is disabled after 5 dead deliveries. To change the secret, delete the webhook and the terminal and run step 2 again. Deleting the terminal also removes its subscriptions, so the listeners must create theirs again; their reconciliation pass covers anything missed meanwhile.
+
+**What the bridge refuses.** A body over 8 KiB, anything that is not a notice (a `full` webhook pointed at the terminal gets 400 on every delivery and is disabled after 5 dead deliveries), and a signature or timestamp that does not verify (401).
+
 ## Cloudflare Containers (issues.poietic.tech)
 
 The production instance runs on Cloudflare Containers. See [ADR 0019](adr/0019-cloudflare-containers-with-litestream.md) for the design.

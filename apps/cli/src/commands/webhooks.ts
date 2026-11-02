@@ -8,6 +8,9 @@ const list = (v: string) =>
     .map((s) => s.trim())
     .filter(Boolean);
 
+const payloadOption = (cmd: Command, what: string) =>
+  cmd.createOption('--payload <payload>', what).choices(['full', 'notice']);
+
 export function registerWebhook(parent: Command, tree: Tree): Command {
   const act: Tree['act'] = (fn) => tree.act(fn);
   const cmd = parent
@@ -31,8 +34,21 @@ export function registerWebhook(parent: Command, tree: Tree): Command {
     .option('--scope <project>', 'only events from this project')
     .option('--description <text>', 'what the webhook is for')
     .option('--inactive', 'create it disabled')
+    .addOption(
+      payloadOption(
+        cmd,
+        'what to send: full (the event, default) or notice (only its seq, ids and type)',
+      ),
+    )
+    .option(
+      '--secret-stdin',
+      'read a supplied signing secret (whsec_…) from stdin instead of generating one',
+    )
     .action(
       act(async (rt, [url], o) => {
+        // From stdin, never an argument, so the secret stays out of shell history and process lists.
+        const secret = o.secretStdin ? (await rt.io.readStdin()).replace(/\r?\n$/, '') : undefined;
+        if (secret === '') throw usage('--secret-stdin read nothing: pipe the secret in');
         const api = await rt.api();
         const created = await rt.call(
           api.POST('/webhooks', {
@@ -42,9 +58,17 @@ export function registerWebhook(parent: Command, tree: Tree): Command {
               ...(o.scope !== undefined && { project: String(o.scope) }),
               ...(o.description !== undefined && { description: String(o.description) }),
               ...(o.inactive === true && { active: false }),
+              ...(o.payload !== undefined && { payload: o.payload as 'full' | 'notice' }),
+              ...(secret !== undefined && { secret }),
             },
           }),
         );
+        if (secret !== undefined) {
+          // The caller supplied the secret and already holds it: never print it back.
+          const { secret: _supplied, ...webhook } = created;
+          rt.out.item('webhook', webhook, (w) => `Created webhook ${String(w.id)}\n`);
+          return;
+        }
         rt.out.secret('webhook', created, {
           value: created.secret,
           warning: 'This is the webhook’s signing secret: store it now; it is not shown again.',
@@ -76,6 +100,9 @@ export function registerWebhook(parent: Command, tree: Tree): Command {
     .option('--description <text>', 'description')
     .option('--enable', 'activate')
     .option('--disable', 'deactivate')
+    .addOption(
+      payloadOption(cmd, 'what to send: full (the event) or notice (only its seq, ids and type)'),
+    )
     .action(
       act(async (rt, [id], o) => {
         if (o.enable && o.disable) throw usage('Use either --enable or --disable');
@@ -94,6 +121,7 @@ export function registerWebhook(parent: Command, tree: Tree): Command {
                 ...(o.description !== undefined && { description: String(o.description) }),
                 ...(o.enable === true && { active: true }),
                 ...(o.disable === true && { active: false }),
+                ...(o.payload !== undefined && { payload: o.payload as 'full' | 'notice' }),
               },
             }),
           ),

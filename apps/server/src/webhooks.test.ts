@@ -121,10 +121,42 @@ describe(`webhooks API (${testDialect()})`, () => {
       eventTypes: ['x.y'],
     });
     expect(bad.status).toBe(400);
+    const badSecret = await call('POST', '/webhooks', {
+      url: 'https://example.com',
+      secret: 'whsec_notEnoughBytes==',
+    });
+    expect(badSecret.status).toBe(400);
+    expect(await badSecret.text()).not.toContain('notEnoughBytes');
+  });
+
+  it('POST /webhooks accepts payload: notice and the receiver gets a notice', async () => {
+    const res = await call('POST', '/webhooks', {
+      url: receiverUrl,
+      eventTypes: ['issue.*'],
+      project: 'HOOK',
+      payload: 'notice',
+    });
+    expect(res.status).toBe(201);
+    const hook = (await res.json()) as { id: string; secret: string; payload: string };
+    expect(hook.payload).toBe('notice');
+    received.length = 0;
+    const issue = (await (
+      await call('POST', '/projects/HOOK/issues', { title: 'Secret plans' })
+    ).json()) as { id: string };
+    await new WebhookRunner(t.db, { policy: { allowPrivate: true }, clock: t.ctx.clock }).runOnce();
+    expect(received).toHaveLength(1);
+    const body = received[0]!.body;
+    expect(body).not.toContain('Secret plans');
+    expect(JSON.parse(body)).toMatchObject({ type: 'issue.created', issueId: issue.id });
+    expect(() =>
+      verifyWebhook(hook.secret, received[0]!.headers, body, { toleranceSeconds: 1e10 }),
+    ).not.toThrow();
+    expect((await call('DELETE', `/webhooks/${hook.id}`)).status).toBe(200);
   });
 
   it('documents the payload in the OpenAPI webhooks section', () => {
     const doc = generateOpenApiDocument() as { webhooks?: Record<string, { post?: unknown }> };
     expect(doc.webhooks?.event?.post).toBeDefined();
+    expect(doc.webhooks?.notice?.post).toBeDefined();
   });
 });

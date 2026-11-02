@@ -1,0 +1,57 @@
+name: release-issues-client
+
+# Publishes @poietic-tech/issues-client (packages/client) to npm on a tag `issues-client-v<semver>`.
+#
+# Publishing is npm trusted publishing: npm trusts this workflow's GitHub OIDC
+# token, so no long-lived npm token exists anywhere.
+
+on:
+  push:
+    tags: ['issues-client-v*']
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write # npm trusted publishing
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      # Anyone with write access can tag any commit; only commits on main publish.
+      - name: Tag is on main
+        run: git fetch --no-tags origin main && git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+      # The tag and package.json must agree, or a mistyped tag publishes
+      # whatever version happens to be on the branch.
+      - name: Tag matches package version
+        run: test "issues-client-v$(node -p 'require("./packages/client/package.json").version')" = "$GITHUB_REF_NAME"
+      # Consumers cannot resolve workspace: or file: specifiers.
+      - name: No workspace or file dependencies
+        run: |
+          node -e '
+            const p = require("./packages/client/package.json");
+            const bad = ["dependencies", "peerDependencies"].flatMap((k) =>
+              Object.entries(p[k] ?? {}).filter(([, v]) => /^(workspace|file):/.test(v)).map(([n, v]) => `${k}: ${n}@${v}`));
+            if (bad.length) { console.error(bad.join("\n")); process.exit(1); }
+          '
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          registry-url: https://registry.npmjs.org
+      # Trusted publishing needs npm 11.5.1 or later; npm@11 resolves to that.
+      - run: npm install -g npm@11
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      # Includes the bundle test, which builds the package and imports it.
+      - run: pnpm vitest run --project client
+      - run: pnpm --filter @poietic-tech/issues-client build
+      # In the monorepo `exports` points at src/; the published package points it at dist/.
+      - run: node packages/client/scripts/publish-manifest.mjs
+      - run: npm publish --access public --provenance
+        working-directory: packages/client

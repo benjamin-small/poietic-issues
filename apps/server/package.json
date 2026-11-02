@@ -28,6 +28,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@poietic-tech/issues-client": "workspace:*",
     "vitest": "^5.0.2"
   }
 }

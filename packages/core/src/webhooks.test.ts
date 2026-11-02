@@ -13,6 +13,8 @@ import {
   dispatchWebhookEvents,
   getWebhook,
   isPrivateAddress,
+  listEvents,
+  listWebhooks,
   listWebhookDeliveries,
   publicOnlyLookup,
   redeliverWebhook,
@@ -57,6 +59,21 @@ describe('webhook signing (Standard Webhooks)', () => {
     expect(() =>
       verifyWebhook(secret, headers, '{"a":1}', { now: new Date(now.getTime() + 600_000) }),
     ).toThrow(/tolerance/);
+  });
+});
+
+describe("the bridge's signature vector", () => {
+  it('matches the vector in poietic-bridge apps/worker/test/poietic-issues.test.ts', () => {
+    const body =
+      '{"seq":7,"id":"evt_01jvector","type":"issue.created","projectId":"prj_01jvector","issueId":"iss_01jvector","actorId":"usr_01jvector","createdAt":"2026-11-01T12:00:00.000Z"}';
+    expect(
+      signWebhook(
+        'whsec_AwoRGB8mLTQ7QklQV15lbHN6gYiPlp2kq7K5wMfO1dw=',
+        'whd_01jvector',
+        1800000000,
+        body,
+      ),
+    ).toBe('v1,wpoJY0Zmwpy23ozMFAcZH13pC1MEPU36DKHDLIKD/z8=');
   });
 });
 
@@ -296,6 +313,145 @@ describe(`webhooks (${testDialect()})`, () => {
     while ((await deliverDueWebhooks(t.ctx, { policy: slow })) > 0);
     expect(sends).toBe(total);
     await deleteWebhook(t.ctx, hook.id);
+  });
+
+  it('notice webhooks send only the notice', async () => {
+    const hook = await createWebhook(
+      t.ctx,
+      { url: receiverUrl, eventTypes: ['issue.*'], project: 'WH', payload: 'notice' },
+      policy,
+    );
+    expect(hook.payload).toBe('notice');
+    const issue = await createIssue(t.ctx, 'WH', { title: 'Notice me' });
+    await dispatchWebhookEvents(t.ctx);
+    await deliver();
+    received.length = 0;
+    await updateIssue(t.ctx, issue.key, { priority: 2 });
+    await dispatchWebhookEvents(t.ctx);
+    expect(await deliver()).toBe(1);
+    const [r] = received;
+    const events = await listEvents(t.ctx, { issue: issue.id });
+    const event = events.data.at(-1)!;
+    expect(r!.body).toBe(
+      JSON.stringify({
+        seq: event.seq,
+        id: event.id,
+        type: 'issue.updated',
+        projectId: event.projectId,
+        issueId: issue.id,
+        actorId: event.actorId,
+        createdAt: event.createdAt,
+      }),
+    );
+    expect(Buffer.byteLength(r!.body)).toBeLessThan(8192);
+    const headers = r!.headers as Record<string, string>;
+    expect(headers['x-poietic-issues-event']).toBe('issue.updated');
+    expect(() =>
+      verifyWebhook(hook.secret, headers, r!.body, { toleranceSeconds: 1e10 }),
+    ).not.toThrow();
+    await deleteWebhook(t.ctx, hook.id);
+  });
+
+  it('full payload stays the default, and payload can be switched', async () => {
+    const hook = await createWebhook(
+      t.ctx,
+      { url: receiverUrl, eventTypes: ['issue.*'], project: 'WH' },
+      policy,
+    );
+    expect(hook.payload).toBe('full');
+    received.length = 0;
+    const issue = await createIssue(t.ctx, 'WH', { title: 'Full' });
+    await dispatchWebhookEvents(t.ctx);
+    await deliver();
+    expect(JSON.parse(received[0]!.body).data.issue.key).toBe(issue.key);
+
+    expect((await updateWebhook(t.ctx, hook.id, { payload: 'notice' }, policy)).payload).toBe(
+      'notice',
+    );
+    received.length = 0;
+    await updateIssue(t.ctx, issue.key, { priority: 3 });
+    await dispatchWebhookEvents(t.ctx);
+    await deliver();
+    expect(JSON.parse(received[0]!.body)).not.toHaveProperty('data');
+    await deleteWebhook(t.ctx, hook.id);
+  });
+
+  it('the test ping of a notice webhook is a notice', async () => {
+    const hook = await createWebhook(
+      t.ctx,
+      { url: receiverUrl, project: 'WH', payload: 'notice' },
+      policy,
+    );
+    received.length = 0;
+    expect(await testWebhook(t.ctx, hook.id, policy)).toMatchObject({ ok: true });
+    const ping = JSON.parse(received[0]!.body);
+    expect(Object.keys(ping)).toEqual([
+      'seq',
+      'id',
+      'type',
+      'projectId',
+      'issueId',
+      'actorId',
+      'createdAt',
+    ]);
+    expect(ping).toMatchObject({
+      seq: 0,
+      type: 'webhook.ping',
+      projectId: hook.projectId,
+      issueId: null,
+      actorId: t.ctx.actor.id,
+    });
+    await deleteWebhook(t.ctx, hook.id);
+  });
+
+  it('a supplied secret is stored and signs deliveries', async () => {
+    const secret = 'whsec_AwoRGB8mLTQ7QklQV15lbHN6gYiPlp2kq7K5wMfO1dw=';
+    const hook = await createWebhook(
+      t.ctx,
+      { url: receiverUrl, eventTypes: ['issue.*'], project: 'WH', secret },
+      policy,
+    );
+    expect(hook.secret).toBe(secret);
+    expect('secret' in (await getWebhook(t.ctx, hook.id))).toBe(false);
+    expect((await listWebhooks(t.ctx)).every((h) => !('secret' in h))).toBe(true);
+    await createIssue(t.ctx, 'WH', { title: 'Signed with the bridge secret' });
+    received.length = 0;
+    await dispatchWebhookEvents(t.ctx);
+    await deliver();
+    expect(received).toHaveLength(1);
+    expect(() =>
+      verifyWebhook(secret, received[0]!.headers as Record<string, string>, received[0]!.body, {
+        toleranceSeconds: 1e10,
+      }),
+    ).not.toThrow();
+    await deleteWebhook(t.ctx, hook.id);
+  });
+
+  it('a secret the bridge could not verify is refused', async () => {
+    for (const secret of [
+      'AwoRGB8mLTQ7QklQV15lbHN6gYiPlp2kq7K5wMfO1dw=',
+      'whsec_AwoRGB8mLTQ7QklQV15lbHN6gYiPlp2kq7K5wMfO1dw_-',
+      'whsec_AwoRGB8mLTQ7QklQV15lbHN6gYiPlp2kq7K5wMfO1dw',
+      'whsec_AAAAAAAAAAA=',
+      `whsec_${Buffer.alloc(100, 7).toString('base64')}`,
+      'whsec_',
+    ]) {
+      const error = await createWebhook(t.ctx, { url: receiverUrl, secret }, policy).then(
+        () => null,
+        (e: unknown) => e,
+      );
+      expect(error, secret).toMatchObject({ code: 'VALIDATION_FAILED' });
+      expect(JSON.stringify(error), secret).toMatch(/secret/);
+      // The rule's own message says whsec_, so look for the part only this secret has.
+      const own = secret.slice('whsec_'.length);
+      if (own) expect(JSON.stringify(error), secret).not.toContain(own);
+    }
+  });
+
+  it('an unknown payload is refused', async () => {
+    await expect(
+      createWebhook(t.ctx, { url: receiverUrl, payload: 'snapshot' as never }, policy),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
   });
 
   it('pings, rotates secrets, validates URLs and requires admin', async () => {

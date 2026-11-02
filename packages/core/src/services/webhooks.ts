@@ -21,6 +21,7 @@ import {
   type WebhookDeliveryStatus,
   type WebhookTestResult,
   type WebhookWithSecret,
+  toEventNotice,
   webhookMatchesType,
 } from '@poietic-tech/issues-schema';
 import { nowIso, type ServiceContext } from '../context.ts';
@@ -55,6 +56,7 @@ function toWebhook(r: WebhookRow): Webhook {
     eventTypes: fromJson<string[]>(r.event_types, []),
     projectId: r.project_id,
     active: toBool(r.active),
+    payload: r.payload,
     failureCount: r.failure_count,
     disabledAt: r.disabled_at,
     createdBy: r.created_by,
@@ -108,7 +110,7 @@ export async function createWebhook(
     const project = data.project ? await getProjectRow(ctx, tx, data.project, 'read') : null;
     const now = nowIso(ctx);
     await ensureDispatchCursor(tx, now);
-    const secret = generateWebhookSecret();
+    const secret = data.secret ?? generateWebhookSecret();
     const row = await tx
       .insertInto('webhooks')
       .values({
@@ -119,6 +121,7 @@ export async function createWebhook(
         event_types: toJson(data.eventTypes),
         project_id: project?.id ?? null,
         active: data.active,
+        payload: data.payload,
         failure_count: 0,
         created_by: ctx.actor.id,
         created_at: now,
@@ -147,6 +150,7 @@ export async function updateWebhook(
     if (patch.url !== undefined) set.url = patch.url;
     if (patch.description !== undefined) set.description = patch.description;
     if (patch.eventTypes !== undefined) set.event_types = toJson(patch.eventTypes);
+    if (patch.payload !== undefined) set.payload = patch.payload;
     if (patch.project !== undefined)
       set.project_id =
         patch.project === null ? null : (await getProjectRow(ctx, tx, patch.project, 'read')).id;
@@ -226,7 +230,7 @@ export async function testWebhook(
     data: { webhook: { id: row.id, url: row.url } },
     createdAt: now.toISOString(),
   };
-  const body = JSON.stringify(ping);
+  const body = JSON.stringify(row.payload === 'notice' ? toEventNotice(ping) : ping);
   const deliveryId = newId('webhookDelivery');
   const result = await (policy.send ?? sendWebhookRequest)({
     url: row.url,
@@ -473,7 +477,15 @@ export async function deliverDueWebhooks(
     const due = await tx
       .selectFrom('webhook_deliveries as d')
       .innerJoin('webhooks as w', 'w.id', 'd.webhook_id')
-      .select(['d.id', 'd.event_seq', 'd.attempts', 'w.id as webhook_id', 'w.url', 'w.secret'])
+      .select([
+        'd.id',
+        'd.event_seq',
+        'd.attempts',
+        'w.id as webhook_id',
+        'w.url',
+        'w.secret',
+        'w.payload',
+      ])
       .where('d.status', 'in', ['pending', 'failed'])
       .where('d.next_attempt_at', '<=', nowText)
       .where((eb) => eb.or([eb('d.locked_until', 'is', null), eb('d.locked_until', '<=', nowText)]))
@@ -509,16 +521,18 @@ export async function deliverDueWebhooks(
     claimed.map(async (delivery) => {
       const event = events.get(Number(delivery.event_seq));
       const attemptAt = ctx.clock.now();
+      const body =
+        event && JSON.stringify(delivery.payload === 'notice' ? toEventNotice(event) : event);
       const result = event
         ? await send({
             url: delivery.url,
-            body: JSON.stringify(event),
+            body: body!,
             headers: {
               ...webhookHeaders(
                 delivery.secret,
                 delivery.id,
                 Math.floor(attemptAt.getTime() / 1000),
-                JSON.stringify(event),
+                body!,
               ),
               'x-poietic-issues-event': event.type,
               'x-poietic-issues-event-seq': String(event.seq),

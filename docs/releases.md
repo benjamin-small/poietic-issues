@@ -49,3 +49,19 @@ access, since it installs `@poietic-tech/cli` from npm.
 5. Delete `~/.config/poietic-issues/config.json`. Install the module, and use
    `poietic-tech login` with `POIETIC_IDENTITY=Claude` for local Claude
    sessions.
+
+## Releasing `@poietic-tech/issues-client`
+
+`packages/client` is published to npm as `@poietic-tech/issues-client`: the typed API client, the event follower and the provenance helpers agents use. The release workflow (`.github/workflows/release-issues-client.yml`) publishes it from a tag, through npm trusted publishing (OIDC).
+
+Inside the monorepo the package's `exports` points at `src/`, as for every internal package. The workflow builds `dist/` and runs `packages/client/scripts/publish-manifest.mjs`, which points `exports` at the build and drops the monorepo-only fields, just before `npm publish`.
+
+1. Bump `version` in `packages/client/package.json` and merge to `main`.
+2. Tag the merge commit `issues-client-vX.Y.Z` (matching the version exactly) and push the tag.
+3. Watch the `release-issues-client` run. It typechecks, runs the client tests (including the bundle test, which builds and imports the package), checks that the tag is on `main`, matches the package version and that `dependencies` holds no `workspace:` or `file:` specifier, builds, rewrites the manifest and publishes.
+
+### One-time owner steps
+
+1. Claim the npm name with a manual placeholder publish of `@poietic-tech/issues-client@0.0.1-stage`, with 2FA and `--tag stage`.
+2. On npmjs.com, add a trusted publisher: `poietic-tech` / `poietic-issues` / `release-issues-client.yml` / environment `npm`.
+3. Extend the `npm` environment's tag rule and the tag ruleset to cover `issues-client-v*`.

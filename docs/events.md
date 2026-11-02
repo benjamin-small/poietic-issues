@@ -40,6 +40,7 @@ Every change is appended to the `events` table in the same transaction as the ch
 - `data.changes` holds `{ field: { from, to } }` for updates.
 - `GET /events` and the live stream show each viewer only what they may see: readers below `write` on a project do not get events of trashed issues or deleted attachments (the live stream sends them content-free tombstones of the deletions instead), deleted comments arrive with an empty body, and trashed parents are cut out of snapshots and parent changes ([security.md](security.md#project-access)). Webhooks deliver the raw events.
 - `data.requestId` identifies the API request that caused the change. The web app uses it to ignore echoes of its own writes.
+- `data.reason` is the one-line reason the write was made with (`X-Change-Reason`, see [api.md](api.md#change-reasons)). It is absent when none was given. Agents always give one; the web activity view and `poietic-tech issues issue activity` show it.
 
 | Type                                                                | `data`                                                                          |
 | ------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
@@ -107,6 +108,17 @@ poietic-tech issues webhook redeliver whd_…
 - `eventTypes` takes event types, `<noun>.*` (e.g. `issue.*`) or `*`.
 - A webhook can be scoped to one project.
 - A webhook receives only events that happen after it is created. History is never replayed.
+
+**Payload.** A webhook's `payload` is `full` (the default) or `notice`:
+
+- `full` sends the whole event, as described below.
+- `notice` sends only which event happened, never what it contains: `{ seq, id, type, projectId, issueId, actorId, createdAt }`, documented under `webhooks.notice` in the OpenAPI document. The receiver reads `GET /events` as itself to learn more, so the tracker's access rules still apply. This is how the bridge wakes agents without holding issue content. The test ping of a notice webhook is a notice too, with `seq` 0 and `type` `webhook.ping`.
+
+```sh
+poietic-tech issues webhook create https://bridge.poietic.tech/in/poietic-issues --payload notice --secret-stdin
+```
+
+**Secret.** The tracker generates each webhook's `whsec_` signing secret, unless the create call supplies one (`secret`, or `--secret-stdin` in the CLI). A receiver that issues its own secret, such as the bridge, needs that. A supplied secret must be `whsec_` and standard, padded base64 of 16 to 64 bytes, which is what strict verifiers decode. The secret is returned only by the create call (and by rotation, which always generates a new one).
 
 **Request.** Each delivery is a `POST` with the event as the JSON body. The body has exactly the shape returned by `GET /events` and documented under `webhooks.event` in the OpenAPI document. Headers:
 

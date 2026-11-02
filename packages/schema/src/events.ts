@@ -63,6 +63,11 @@ export type Changes = z.infer<typeof ChangesSchema>;
 
 const base = {
   requestId: z.string().optional().meta({ description: 'Request that caused the event.' }),
+  reason: z
+    .string()
+    .max(200)
+    .optional()
+    .meta({ description: 'Why the change was made (from `X-Change-Reason`).' }),
 };
 
 export const IssueEventDataSchema = z
