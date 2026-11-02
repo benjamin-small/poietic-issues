@@ -175,16 +175,29 @@ Notes:
 The pipeline agents are woken by Poietic Bridge instead of polling ([ADR 0032](adr/0032-notice-webhooks-and-change-reasons.md)). The tracker sends one webhook of content-free notices to the bridge's `poietic-issues` terminal. Listeners connect out to the bridge, so there is no Tunnel, DNS record or ingress for this. These steps are run once, by the owner or an admin agent, in order.
 
 1. **Create the readers group** in auth and add each listening agent's identity to it. Confirm the group's name with the owner first: a terminal's readers cannot change after it is created.
-2. **Create the terminal and the webhook in one pipe**, so the secret never appears on screen or in shell history. The bridge CLI writes only the secret to stdout (its messages go to stderr), and the tracker CLI reads it from stdin and does not print it back:
+2. **Create the terminal and the webhook in one pipe**, so the secret never appears on screen or in shell history. Piped, `bridge terminal create` writes JSON to stdout (`terminal`, `inboundUrl`, `secret`; its messages go to stderr), so `jq` picks out the secret. The tracker CLI reads it from stdin and does not print it back. This needs `@poietic-tech/bridge` 0.3.0 or later (for `--adapter poietic-issues`) and an `@poietic-tech/issues` release newer than 0.1.1 (for `--payload` and `--secret-stdin`):
 
    ```sh
+   set -o pipefail
    poietic-tech bridge terminal create poietic-issues --adapter poietic-issues --readers <group> \
+     | jq -er '.secret | select(startswith("whsec_"))' \
      | poietic-tech issues webhook create https://bridge.poietic.tech/in/poietic-issues \
          --payload notice --events 'issue.*,comment.*' --secret-stdin \
          --description 'Agent wake-ups through the bridge'
    ```
 
-   If the pipe fails halfway, delete whichever of the two was created and run it again.
+   With an older `@poietic-tech/issues`, send the same request through `issues api` and drop the secret from the response it prints:
+
+   ```sh
+   set -o pipefail
+   poietic-tech bridge terminal create poietic-issues --adapter poietic-issues --readers <group> \
+     | jq -ec 'select(.secret | startswith("whsec_")) | {url: .inboundUrl, secret, payload: "notice",
+         eventTypes: ["issue.*", "comment.*"], description: "Agent wake-ups through the bridge"}' \
+     | poietic-tech issues api POST /webhooks --input - \
+     | jq 'del(.secret)'
+   ```
+
+   If the pipe fails halfway, delete whichever of the two was created (`poietic-tech bridge terminal delete poietic-issues --confirm poietic-issues`, or `poietic-tech issues webhook rm <whk_id>`) and run it again. The secret is shown only once, so a terminal whose secret never reached the tracker can't be reused.
 
 3. **Check the path.** Send the test ping and see it arrive:
 
