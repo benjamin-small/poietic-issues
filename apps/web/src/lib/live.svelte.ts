@@ -114,15 +114,17 @@ function handle(qc: QueryClient, event: TrackerEvent, meId: string | undefined) 
     return;
   }
   // Membership changed: the viewer's own level (`myAccess`) may differ, so refetch it (the controls that depend on
-  // it follow) and the members list. Nothing else about the project changed.
-  if (event.type.startsWith('project.member_')) {
+  // it follow) and the members list. Nothing else about the project changed. A group grant is the same kind of
+  // change; its event names a group, not a user, so it cannot say whether it concerns the viewer.
+  const groupGrant = event.type.startsWith('project.group_grant_');
+  if (event.type.startsWith('project.member_') || groupGrant) {
     void qc.invalidateQueries({ queryKey: ['project'] });
     void qc.invalidateQueries({ queryKey: keys.projects });
     void qc.invalidateQueries({ queryKey: ['members'] });
     // The viewer's own role changed: what they may see changed too (a former writer loses the trash), so open
     // lists and issue pages refetch.
     const member = (event.data as { member?: { user?: { id?: string } } }).member;
-    if (meId && member?.user?.id === meId) {
+    if (groupGrant || (meId && member?.user?.id === meId)) {
       void qc.invalidateQueries({ queryKey: ['issues'] });
       void qc.invalidateQueries({ queryKey: ['issue'] });
     }
@@ -214,6 +216,9 @@ export function connectLive(qc: QueryClient): () => void {
     'project.member_added',
     'project.member_changed',
     'project.member_removed',
+    'project.group_grant_added',
+    'project.group_grant_changed',
+    'project.group_grant_removed',
     'project.repo_added',
     'project.repo_removed',
     'status.created',

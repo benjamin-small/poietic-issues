@@ -104,16 +104,19 @@ Conflicts share exit 2 with usage errors but keep their own machine code, so an 
 
 ## Project access
 
-Projects are `private` (members and admins) or `public` (anyone can read). Members have a role: `viewer`, `editor` or `manager`. Changing any of this needs `manage` on the project. These commands take the project from `-P`, `POIETIC_ISSUES_PROJECT` or `.poietic-issues.json`, like the rest of the CLI.
+Projects are `private` (members and admins) or `public` (anyone can read). Members have a role: `viewer`, `editor` or `manager`. A project can also grant a role to an auth group (`--group <slug>`, with `set` and `remove` too). Changing any of this needs `manage` on the project. These commands take the project from `-P`, `POIETIC_ISSUES_PROJECT` or `.poietic-issues.json`, like the rest of the CLI.
 
 ```sh
 poietic-tech issues project edit ENG --visibility public
 poietic-tech issues project members add @ada --role editor -P ENG
 poietic-tech issues project members set @ada --role manager -P ENG
-poietic-tech issues project members list -P ENG
+poietic-tech issues project members add --group issues-users --role viewer -P ENG   # an auth group
+poietic-tech issues project members list -P ENG                                    # KIND is user or group
 poietic-tech issues project repo add https://github.com/acme/app -P ENG   # or acme/app
 poietic-tech issues issue edit ENG-42 --repo acme/app                      # one of the project's linked repos
 ```
+
+Since `@poietic-tech/issues` 0.3.0, `project members list` prints `KIND MEMBER ROLE SINCE` (it was `USER ROLE SINCE`), and its JSON rows carry `kind: "user"` or `"group"`. Scripts that parse the table or the user rows should read the new column and field.
 
 ## Discovery
 

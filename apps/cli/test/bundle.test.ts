@@ -36,7 +36,7 @@ describe('the built module', () => {
   it('has the published package.json the host and npm expect', () => {
     expect(pkg).toMatchObject({
       name: '@poietic-tech/issues',
-      version: '0.2.0',
+      version: '0.3.0',
       files: ['dist', 'README.md', 'LICENSE'],
       engines: { node: '>=22.12' },
       peerDependencies: { '@poietic-tech/cli': '^0.2.0' },
