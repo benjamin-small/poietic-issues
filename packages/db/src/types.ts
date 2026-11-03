@@ -70,6 +70,14 @@ export interface ProjectMembersTable {
   updated_at: Timestamp;
 }
 
+export interface ProjectGroupGrantsTable {
+  project_id: string;
+  group_slug: string;
+  role: 'viewer' | 'editor' | 'manager';
+  created_at: Timestamp;
+  updated_at: Timestamp;
+}
+
 export interface ProjectReposTable {
   id: string;
   project_id: string;
@@ -305,6 +313,7 @@ export interface Database {
   user_identities: UserIdentitiesTable;
   projects: ProjectsTable;
   project_members: ProjectMembersTable;
+  project_group_grants: ProjectGroupGrantsTable;
   project_repos: ProjectReposTable;
   statuses: StatusesTable;
   labels: LabelsTable;

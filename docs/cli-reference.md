@@ -348,7 +348,7 @@ Create a project with the default workflow (admin)
 | `-k, --key <KEY>` | issue key prefix, e.g. ENG (immutable) **(required)** |
 | `-n, --name <name>` | name **(required)** |
 | `--description <text>` | description |
-| `--visibility <visibility>` | public: anyone can read; private (default): members and admins |
+| `--visibility <visibility>` | public: anyone can read; private (default): members, holders of a group grant, and admins |
 
 ### `poietic-tech issues project edit [project]`
 
@@ -362,7 +362,7 @@ Edit a project
 | --- | --- |
 | `-n, --name <name>` | name |
 | `--description <text>` | description |
-| `--visibility <visibility>` | public: anyone can read; private: members and admins |
+| `--visibility <visibility>` | public: anyone can read; private: members, holders of a group grant, and admins |
 | `--archive` | archive the project (admin) |
 | `--unarchive` | unarchive the project (admin) |
 
@@ -380,39 +380,45 @@ List the project members
 
 Aliases: `ls`
 
-### `poietic-tech issues project members add <user>`
+### `poietic-tech issues project members add [user]`
 
-Give a user a role on the project (needs manage)
+Give a user (or, with --group, an auth group) a role on the project (needs manage)
 
 | Argument | Description |
 | --- | --- |
-| `user` | handle, @handle or user id |
+| `user` | handle, @handle or user id (optional) |
 
 | Option | Description |
 | --- | --- |
+| `--group <slug>` | an auth group (by its slug) instead of a user |
 | `--role <role>` | viewer reads, editor also writes, manager also manages the project **(required)** |
 
-### `poietic-tech issues project members set <user>`
+### `poietic-tech issues project members set [user]`
 
-Change a member's role (needs manage)
+Change a member's role, or a group's (needs manage)
 
 | Argument | Description |
 | --- | --- |
-| `user` | handle, @handle or user id |
+| `user` | handle, @handle or user id (optional) |
 
 | Option | Description |
 | --- | --- |
+| `--group <slug>` | an auth group (by its slug) instead of a user |
 | `--role <role>` | the new role **(required)** |
 
-### `poietic-tech issues project members remove <user>`
+### `poietic-tech issues project members remove [user]`
 
-Remove a user's role on the project (needs manage)
+Remove a user's role on the project, or a group's (needs manage)
 
 Aliases: `rm`
 
 | Argument | Description |
 | --- | --- |
-| `user` | handle, @handle or user id |
+| `user` | handle, @handle or user id (optional) |
+
+| Option | Description |
+| --- | --- |
+| `--group <slug>` | an auth group (by its slug) instead of a user |
 
 ### `poietic-tech issues project repo list`
 

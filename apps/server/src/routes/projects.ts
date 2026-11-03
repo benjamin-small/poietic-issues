@@ -77,7 +77,7 @@ export function registerProjectRoutes(app: TrackerApp) {
       tags,
       summary: 'Get a project',
       description:
-        'Public projects are readable by anyone, private ones by members and admins; others get `NOT_FOUND`.',
+        'Public projects are readable by anyone, private ones by members, holders of a group grant, and admins; others get `NOT_FOUND`.',
       request: { params: projectParam },
       responses: {
         200: json(ProjectWithAccessSchema, 'Project'),

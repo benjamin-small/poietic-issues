@@ -686,7 +686,7 @@ export interface paths {
         };
         /**
          * Get a project
-         * @description Public projects are readable by anyone, private ones by members and admins; others get `NOT_FOUND`.
+         * @description Public projects are readable by anyone, private ones by members, holders of a group grant, and admins; others get `NOT_FOUND`.
          */
         get: {
             parameters: {
@@ -1777,6 +1777,223 @@ export interface paths {
                 };
             };
         };
+        trace?: never;
+    };
+    "/projects/{project}/group-grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the groups granted a role on a project
+         * @description Anyone who can read the project can see its group grants. A grant gives every member of an auth.poietic.tech group a role on the project.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Project key (e.g. `ENG`) or id. */
+                    project: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Group grants */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            data: components["schemas"]["ProjectGroupGrant"][];
+                        };
+                    };
+                };
+                /** @description Problem details. Codes: VALIDATION_FAILED. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Problem details. Codes: UNAUTHENTICATED. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Problem details. Codes: NOT_FOUND. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{project}/group-grants/{group}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Give a group a role on a project
+         * @description Needs manage on the project. Creates the grant or changes its role; the same role again changes nothing.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Project key (e.g. `ENG`) or id. */
+                    project: string;
+                    /** @description Auth group slug (lowercase letters, digits and `-`). */
+                    group: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["SetProjectGroupGrantInput"];
+                };
+            };
+            responses: {
+                /** @description The grant */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProjectGroupGrant"];
+                    };
+                };
+                /** @description Problem details. Codes: VALIDATION_FAILED. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Problem details. Codes: UNAUTHENTICATED. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Problem details. Codes: FORBIDDEN. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Problem details. Codes: NOT_FOUND. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        /**
+         * Remove a group's role on a project
+         * @description Needs manage on the project. `NOT_FOUND` if the group has no grant.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Project key (e.g. `ENG`) or id. */
+                    project: string;
+                    /** @description Auth group slug (lowercase letters, digits and `-`). */
+                    group: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Removed. */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Problem details. Codes: VALIDATION_FAILED. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Problem details. Codes: UNAUTHENTICATED. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Problem details. Codes: FORBIDDEN. */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Problem details. Codes: NOT_FOUND. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/projects/{project}/repos": {
@@ -3740,7 +3957,7 @@ export interface paths {
                     project?: string;
                     /** @description Issue key or id. */
                     issue?: string;
-                    /** @description Comma-separated event types: issue.created, issue.updated, issue.deleted, issue.restored, comment.created, comment.updated, comment.deleted, link.created, link.deleted, project.created, project.updated, project.member_added, project.member_changed, project.member_removed, project.repo_added, project.repo_removed, status.created, status.updated, status.deleted, label.created, label.updated, label.deleted, user.created, user.updated, field.created, field.updated, field.deleted, attachment.created, attachment.deleted. */
+                    /** @description Comma-separated event types: issue.created, issue.updated, issue.deleted, issue.restored, comment.created, comment.updated, comment.deleted, link.created, link.deleted, project.created, project.updated, project.member_added, project.member_changed, project.member_removed, project.group_grant_added, project.group_grant_changed, project.group_grant_removed, project.repo_added, project.repo_removed, status.created, status.updated, status.deleted, label.created, label.updated, label.deleted, user.created, user.updated, field.created, field.updated, field.deleted, attachment.created, attachment.deleted. */
                     types?: string;
                 };
                 header?: never;
@@ -5438,7 +5655,7 @@ export interface components {
             seq: number;
             id: string;
             /** @enum {string} */
-            type: "issue.created" | "issue.updated" | "issue.deleted" | "issue.restored" | "comment.created" | "comment.updated" | "comment.deleted" | "link.created" | "link.deleted" | "project.created" | "project.updated" | "project.member_added" | "project.member_changed" | "project.member_removed" | "project.repo_added" | "project.repo_removed" | "status.created" | "status.updated" | "status.deleted" | "label.created" | "label.updated" | "label.deleted" | "user.created" | "user.updated" | "field.created" | "field.updated" | "field.deleted" | "attachment.created" | "attachment.deleted";
+            type: "issue.created" | "issue.updated" | "issue.deleted" | "issue.restored" | "comment.created" | "comment.updated" | "comment.deleted" | "link.created" | "link.deleted" | "project.created" | "project.updated" | "project.member_added" | "project.member_changed" | "project.member_removed" | "project.group_grant_added" | "project.group_grant_changed" | "project.group_grant_removed" | "project.repo_added" | "project.repo_removed" | "status.created" | "status.updated" | "status.deleted" | "label.created" | "label.updated" | "label.deleted" | "user.created" | "user.updated" | "field.created" | "field.updated" | "field.deleted" | "attachment.created" | "attachment.deleted";
             actorId: string | null;
             actor: components["schemas"]["UserSummary"] | null;
             projectId: string | null;
@@ -5646,7 +5863,7 @@ export interface components {
             myAccess: "read" | "write" | "manage";
         };
         /**
-         * @description `public`: anyone can read, even signed out. `private`: members and admins only.
+         * @description `public`: anyone can read, even signed out. `private`: members, holders of a group grant, and admins only.
          * @enum {string}
          */
         ProjectVisibility: "public" | "private";
@@ -5821,6 +6038,30 @@ export interface components {
             role: components["schemas"]["ProjectRole"];
         };
         UpdateProjectMemberInput: {
+            role: components["schemas"]["ProjectRole"];
+        };
+        ProjectGroupGrant: {
+            group: components["schemas"]["GroupSlug"];
+            role: components["schemas"]["ProjectRole"];
+            /**
+             * Format: date-time
+             * @description ISO-8601 UTC timestamp.
+             * @example 2026-09-26T13:49:00.123Z
+             */
+            createdAt: string;
+            /**
+             * Format: date-time
+             * @description ISO-8601 UTC timestamp.
+             * @example 2026-09-26T13:49:00.123Z
+             */
+            updatedAt: string;
+        };
+        /**
+         * @description An auth group slug.
+         * @example team
+         */
+        GroupSlug: string;
+        SetProjectGroupGrantInput: {
             role: components["schemas"]["ProjectRole"];
         };
         AddProjectRepoInput: {
@@ -6789,6 +7030,9 @@ export type ProjectMember = components['schemas']['ProjectMember'];
 export type ProjectRole = components['schemas']['ProjectRole'];
 export type AddProjectMemberInput = components['schemas']['AddProjectMemberInput'];
 export type UpdateProjectMemberInput = components['schemas']['UpdateProjectMemberInput'];
+export type ProjectGroupGrant = components['schemas']['ProjectGroupGrant'];
+export type GroupSlug = components['schemas']['GroupSlug'];
+export type SetProjectGroupGrantInput = components['schemas']['SetProjectGroupGrantInput'];
 export type AddProjectRepoInput = components['schemas']['AddProjectRepoInput'];
 export type IssuePage = components['schemas']['IssuePage'];
 export type Issue = components['schemas']['Issue'];

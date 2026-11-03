@@ -36,7 +36,11 @@
   const myId = $derived(isSignedIn(me.data) ? me.data.id : undefined);
 
   const VISIBILITY: { value: Project['visibility']; label: string; text: string }[] = [
-    { value: 'private', label: 'Private', text: 'Only members and admins can see it.' },
+    {
+      value: 'private',
+      label: 'Private',
+      text: 'Only members, holders of a group grant, and admins can see it.',
+    },
     {
       value: 'public',
       label: 'Public',

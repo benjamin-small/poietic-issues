@@ -12,7 +12,8 @@ const ISS = 'https://auth.example.test';
  */
 export function testSso(t: TestContext): {
   options: SsoOptions;
-  bearer(handle: string): Promise<string>;
+  /** Links the user to a subject; `groups` become the groups the verified token carries. */
+  bearer(handle: string, groups?: string[]): Promise<string>;
 } {
   const options: SsoOptions = {
     name: 'Example',
@@ -30,7 +31,7 @@ export function testSso(t: TestContext): {
               sub: token,
               name: `Person ${token}`,
               role: 'user',
-              groups: [],
+              groups: token.includes('+') ? token.split('+')[1]!.split(',') : [],
               kind: 'human',
               owner: null,
               sid: 's1',
@@ -43,13 +44,13 @@ export function testSso(t: TestContext): {
   };
   return {
     options,
-    async bearer(handle) {
+    async bearer(handle, groups = []) {
       const user = await t.db.kysely
         .selectFrom('users')
         .select('id')
         .where('handle', '=', handle)
         .executeTakeFirstOrThrow();
-      const subject = `test-${handle}`;
+      const subject = `test-${handle}${groups.length ? `+${groups.join(',')}` : ''}`;
       await t.db.kysely
         .insertInto('user_identities')
         .values({

@@ -1,7 +1,9 @@
 # 0031. Identity is global; access is layered
 
 - **Status:** Accepted. Global handles (rollout step 2) shipped in #44. Activation (step 3) still needs a directory
-  disabled state in auth.poietic.tech (see "What auth must provide"), and group grants (step 4) are not built yet.
+  disabled state in auth.poietic.tech (see "What auth must provide"). Group grants (step 4) shipped: the grant key is
+  the group slug alone, per poietic-dot-tech ADR 0001, not `(issuer, group)`, so the table is
+  `project_group_grants(project_id, group_slug, role)`.
 - **Date:** 2026-11-01
 
 ## Context

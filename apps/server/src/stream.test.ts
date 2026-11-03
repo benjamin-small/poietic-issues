@@ -12,7 +12,9 @@ import {
   latestEventSeq,
   listEvents,
   LocalDiskBlobStore,
+  removeGroupGrant,
   removeMember,
+  setGroupGrant,
   updateIssue,
   updateProject,
   updateUser,
@@ -677,6 +679,33 @@ describe(`SSE /events/stream (${testDialect()})`, () => {
     // Bot's removal is visible in full; the viewer's own one arrives without content.
     expect(removed.map((d) => d.member.user.handle)).toEqual(['bot', undefined]);
     expect(removed[1]).toEqual({ member: { user: { id: t.member.actor.id } } });
+  });
+
+  it("starts delivering a project once the viewer's group is granted, and stops after the grant is removed", async () => {
+    await createProject(t.ctx, { key: 'GRP', name: 'Group' });
+    const teamToken = await sso.bearer('member', ['team']);
+    const messages = await collect(
+      '',
+      {},
+      sawTitle('after removal public'),
+      async (seen) => {
+        await createIssue(t.ctx, 'GRP', { title: 'before grant' });
+        await setGroupGrant(t.ctx, 'GRP', 'team', { role: 'viewer' });
+        await delivered(seen, (m) => m.some((x) => x.event === 'project.group_grant_added'));
+        await createIssue(t.ctx, 'GRP', { title: 'while granted' });
+        await delivered(seen, (m) => titles(m).includes('while granted'));
+        await removeGroupGrant(t.ctx, 'GRP', 'team');
+        await delivered(seen, (m) => m.some((x) => x.event === 'project.group_grant_removed'));
+        await createIssue(t.ctx, 'GRP', { title: 'after removal' });
+        await createIssue(t.ctx, 'PUB', { title: 'after removal public' });
+      },
+      teamToken,
+    );
+    expect(titles(messages)).toEqual(['while granted', 'after removal public']);
+    const removed = messages.filter((m) => m.event === 'project.group_grant_removed');
+    expect(removed).toHaveLength(1);
+    // The viewer's own access ended with it, so it arrives without content.
+    expect(JSON.parse(removed[0]!.data!).data).toEqual({ grant: { group: 'team' } });
   });
 
   it('tells anonymous viewers when a public project goes private, without content, and ends the stream', async () => {

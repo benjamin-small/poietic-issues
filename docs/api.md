@@ -188,8 +188,18 @@ Every change is appended to the event log. Each event carries a full resource sn
 
 `GET /events/stream` streams them live (Server-Sent Events). See [events.md](events.md) for the catalogue, live streaming and webhooks.
 
+## Group grants
+
+A project can grant a role to an auth.poietic.tech group, alongside its per-user members ([ADR 0031](adr/0031-global-identity-local-access.md)):
+
+- `GET /projects/{project}/group-grants` lists the grants (needs `read`).
+- `PUT /projects/{project}/group-grants/{group}` sets a group's role (`viewer`, `editor` or `manager`), creating the grant or changing it (needs `manage`). `{group}` is the group's slug.
+- `DELETE /projects/{project}/group-grants/{group}` removes it (needs `manage`).
+
+They emit `project.group_grant_added`, `_changed` and `_removed` ([events.md](events.md)). A caller's level on a project is the highest of their direct membership and the grants for the groups their credential carries: a bearer token carries the groups it was issued with, a cookie session the groups it was created with. See [security.md](security.md) for when a change of groups at auth takes effect.
+
 ## Discovery for agents
 
 `GET /projects/{project}/schema/issue` returns JSON Schemas for create and update with live enums: status names, label names, linked repos (`owner/name`), assignable user handles and custom fields. One call tells an agent every valid value.
 
-The endpoint needs only read access, so it lists only the users who can be assigned: the project's editors and managers, plus admins. `me` is offered only to callers who can write the project. Anonymous readers of a public project get no user handles at all.
+The endpoint needs only read access, so it lists only the users who can be assigned: the project's editors and managers, plus admins. A user who can write only through a group grant is not listed (see [security.md](security.md)). `me` is offered only to callers who can write the project. Anonymous readers of a public project get no user handles at all.

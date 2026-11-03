@@ -474,8 +474,8 @@ describe(`project access commands (${testDialect()})`, () => {
     const set = await cli(['project', 'members', 'set', 'member', '--role', 'manager', '--json']);
     expect(set.json()).toMatchObject({ user: { handle: 'member' }, role: 'manager' });
     const table = await cli(['project', 'members', 'list']);
-    expect(table.stdout.split('\n')[0]).toMatch(/^USER\s+ROLE\s+SINCE$/);
-    expect(table.stdout).toMatch(/@member\s+manager/);
+    expect(table.stdout.split('\n')[0]).toMatch(/^KIND\s+MEMBER\s+ROLE\s+SINCE$/);
+    expect(table.stdout).toMatch(/user\s+@member\s+manager/);
     expect((await cli(['project', 'members', 'list', '-q'])).stdout).toBe('member\n');
     expect((await cli(['project', 'members', 'list', '--json'])).json().data).toHaveLength(1);
 
@@ -542,6 +542,74 @@ describe(`project access commands (${testDialect()})`, () => {
     expect(removed.code).toBe(0);
     expect((await cli(['project', 'members', 'remove', '@member'])).code).toBe(3);
     expect((await cli(['project', 'members', 'list', '--json'])).json().data).toEqual([]);
+  });
+});
+
+describe(`project group grant commands (${testDialect()})`, () => {
+  it('adds, sets, lists and removes a group grant', async () => {
+    const added = await cli([
+      'project',
+      'members',
+      'add',
+      '--group',
+      'team',
+      '--role',
+      'editor',
+      '--json',
+    ]);
+    expect(added.stderr).toBe('');
+    expect(added.code).toBe(0);
+    expect(added.json()).toMatchObject({ group: 'team', role: 'editor' });
+    const set = await cli([
+      'project',
+      'members',
+      'set',
+      '--group',
+      'team',
+      '--role',
+      'viewer',
+      '--json',
+    ]);
+    expect(set.json()).toMatchObject({ group: 'team', role: 'viewer' });
+    const table = await cli(['project', 'members', 'list']);
+    expect(table.stdout.split('\n')[0]).toMatch(/^KIND\s+MEMBER\s+ROLE\s+SINCE$/);
+    expect(table.stdout).toMatch(/group\s+team\s+viewer/);
+    expect((await cli(['project', 'members', 'list', '-q'])).stdout).toBe('team\n');
+    const listed = (await cli(['project', 'members', 'list', '--json'])).json().data;
+    expect(listed).toEqual([expect.objectContaining({ kind: 'group', group: 'team' })]);
+
+    // A user and --group together, or neither, is a usage error.
+    expect(
+      (await cli(['project', 'members', 'add', 'alice', '--group', 'team', '--role', 'editor']))
+        .code,
+    ).toBe(2);
+    expect(
+      (await cli(['project', 'members', 'set', 'alice', '--group', 'team', '--role', 'editor']))
+        .code,
+    ).toBe(2);
+    expect((await cli(['project', 'members', 'remove', 'alice', '--group', 'team'])).code).toBe(2);
+    expect((await cli(['project', 'members', 'add', '--role', 'editor'])).code).toBe(2);
+    expect((await cli(['project', 'members', 'remove'])).code).toBe(2);
+    expect(
+      (await cli(['project', 'members', 'add', '--group', 'Bad_Slug', '--role', 'editor'])).code,
+    ).toBe(2);
+
+    expect((await cli(['project', 'members', 'remove', '--group', 'team'])).code).toBe(0);
+    expect((await cli(['project', 'members', 'remove', '--group', 'team'])).code).toBe(3);
+    expect((await cli(['project', 'members', 'list', '--json'])).json().data).toEqual([]);
+  });
+
+  it('sends PUT /projects/P/group-grants/team', async () => {
+    const calls: string[] = [];
+    const spy: CliIO['fetch'] = (r) => {
+      const req = r as Request;
+      calls.push(`${req.method} ${new URL(req.url).pathname}`);
+      return appFetch(req);
+    };
+    await cli(['project', 'members', 'add', '--group', 'team', '--role', 'editor'], { fetch: spy });
+    await cli(['project', 'members', 'remove', '--group', 'team'], { fetch: spy });
+    expect(calls).toContain('PUT /api/v1/projects/CLI/group-grants/team');
+    expect(calls).toContain('DELETE /api/v1/projects/CLI/group-grants/team');
   });
 });
 

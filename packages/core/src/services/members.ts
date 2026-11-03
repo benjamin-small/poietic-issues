@@ -2,7 +2,11 @@ import { type Database, type Kysely, withWriteTx } from '@poietic-tech/issues-db
 import {
   type AddProjectMemberInput,
   AddProjectMemberInputSchema,
+  GroupSlugSchema,
+  type ProjectGroupGrant,
   type ProjectMember,
+  type SetProjectGroupGrantInput,
+  SetProjectGroupGrantInputSchema,
   type UpdateProjectMemberInput,
   UpdateProjectMemberInputSchema,
 } from '@poietic-tech/issues-schema';
@@ -140,6 +144,119 @@ export async function removeMember(
     await recordEvent(tx, ctx, 'project.member_removed', {
       projectId: project.id,
       data: { member },
+    });
+  });
+}
+
+async function grantRows(
+  db: Exec,
+  projectId: string,
+  group?: string,
+): Promise<ProjectGroupGrant[]> {
+  let q = db
+    .selectFrom('project_group_grants')
+    .select(['group_slug', 'role', 'created_at', 'updated_at'])
+    .where('project_id', '=', projectId)
+    .orderBy('group_slug');
+  if (group) q = q.where('group_slug', '=', group);
+  return (await q.execute()).map((r): ProjectGroupGrant => ({
+    group: r.group_slug,
+    role: r.role,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  }));
+}
+
+/** Group grants of a project, ordered by group. Anyone who can read the project can see them. */
+export async function listGroupGrants(
+  ctx: ServiceContext,
+  projectRef: string,
+): Promise<ProjectGroupGrant[]> {
+  const project = await getProjectRow(ctx, ctx.db.kysely, projectRef, 'read');
+  return grantRows(ctx.db.kysely, project.id);
+}
+
+/**
+ * Gives an auth group a role on a project (an upsert). Managers only. Records `_added` for a new grant and
+ * `_changed` for a new role; the same role again writes nothing and records no event.
+ */
+export async function setGroupGrant(
+  ctx: ServiceContext,
+  projectRef: string,
+  groupRef: string,
+  input: SetProjectGroupGrantInput,
+): Promise<ProjectGroupGrant> {
+  const group = parseInput(GroupSlugSchema, groupRef);
+  const data = parseInput(SetProjectGroupGrantInputSchema, input);
+  // A concurrent first grant of the same group loses the insert to the primary key; retry as an update.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await withWriteTx(ctx.db, async (tx) => {
+        const project = await getProjectRow(ctx, tx, projectRef, 'manage');
+        const [before] = await grantRows(tx, project.id, group);
+        if (before?.role === data.role) return before;
+        const now = nowIso(ctx);
+        if (before) {
+          await tx
+            .updateTable('project_group_grants')
+            .set({ role: data.role, updated_at: now })
+            .where('project_id', '=', project.id)
+            .where('group_slug', '=', group)
+            .execute();
+        } else {
+          await tx
+            .insertInto('project_group_grants')
+            .values({
+              project_id: project.id,
+              group_slug: group,
+              role: data.role,
+              created_at: now,
+              updated_at: now,
+            })
+            .execute();
+        }
+        const [grant] = await grantRows(tx, project.id, group);
+        await recordEvent(
+          tx,
+          ctx,
+          before ? 'project.group_grant_changed' : 'project.group_grant_added',
+          {
+            projectId: project.id,
+            data: {
+              project: { id: project.id, key: project.key },
+              grant,
+              ...(before && { previousRole: before.role }),
+            },
+          },
+        );
+        return grant!;
+      });
+    } catch (error) {
+      if (attempt === 0 && isUniqueViolation(error)) continue;
+      throw error;
+    }
+  }
+}
+
+/** Removes a group's grant on a project. Managers only; NOT_FOUND when the group has none. */
+export async function removeGroupGrant(
+  ctx: ServiceContext,
+  projectRef: string,
+  groupRef: string,
+): Promise<void> {
+  const group = parseInput(GroupSlugSchema, groupRef);
+  await withWriteTx(ctx.db, async (tx) => {
+    const project = await getProjectRow(ctx, tx, projectRef, 'manage');
+    const [grant] = await grantRows(tx, project.id, group);
+    if (!grant) throw notFound('Group grant', group);
+    await tx
+      .deleteFrom('project_group_grants')
+      .where('project_id', '=', project.id)
+      .where('group_slug', '=', group)
+      .execute();
+    await recordEvent(tx, ctx, 'project.group_grant_removed', {
+      projectId: project.id,
+      data: { project: { id: project.id, key: project.key }, grant },
     });
   });
 }

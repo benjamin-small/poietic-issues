@@ -97,7 +97,10 @@ export function registerProject(parent: Command, tree: Tree): Command {
     .requiredOption('-n, --name <name>', 'name')
     .option('--description <text>', 'description')
     .addOption(
-      visibilityOption(cmd, 'public: anyone can read; private (default): members and admins'),
+      visibilityOption(
+        cmd,
+        'public: anyone can read; private (default): members, holders of a group grant, and admins',
+      ),
     )
     .action(
       act(async (rt, _a, o) => {
@@ -123,7 +126,12 @@ export function registerProject(parent: Command, tree: Tree): Command {
     .argument('[project]', 'project key or id')
     .option('-n, --name <name>', 'name')
     .option('--description <text>', 'description')
-    .addOption(visibilityOption(cmd, 'public: anyone can read; private: members and admins'))
+    .addOption(
+      visibilityOption(
+        cmd,
+        'public: anyone can read; private: members, holders of a group grant, and admins',
+      ),
+    )
     .option('--archive', 'archive the project (admin)')
     .option('--unarchive', 'unarchive the project (admin)')
     .action(
