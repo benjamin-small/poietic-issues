@@ -79,3 +79,25 @@ export async function grant(
     )
     .execute();
 }
+
+/** Test helper: gives an auth group a role on a project, writing directly (no permission check, no event). */
+export async function grantGroup(
+  t: TestContext,
+  projectRef: string,
+  group: string,
+  role: 'viewer' | 'editor' | 'manager',
+): Promise<void> {
+  const project = await t.db.kysely
+    .selectFrom('projects')
+    .select('id')
+    .where((eb) => eb.or([eb('id', '=', projectRef), eb('key', '=', projectRef.toUpperCase())]))
+    .executeTakeFirstOrThrow();
+  const now = t.ctx.clock.now().toISOString();
+  await t.db.kysely
+    .insertInto('project_group_grants')
+    .values({ project_id: project.id, group_slug: group, role, created_at: now, updated_at: now })
+    .onConflict((oc) =>
+      oc.columns(['project_id', 'group_slug']).doUpdateSet({ role, updated_at: now }),
+    )
+    .execute();
+}

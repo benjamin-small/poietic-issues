@@ -24,7 +24,7 @@ const WRITE_ROLES = (Object.keys(issuesPolicy.roles) as Role[]).filter((r) =>
   issuesPolicy.atLeast(issuesPolicy.levelOfRole(r), 'write'),
 );
 
-/** The actor as the access library sees them. Groups arrive with ADR 0031 layer 3. */
+/** The actor as the access library sees them. */
 export function principalOf(actor: Actor): Principal {
   return {
     id: actor.id,
@@ -44,16 +44,25 @@ export function unrestricted(ctx: ServiceContext): boolean {
 }
 
 type Visibility = 'public' | 'private';
+type Grant = { to: { user: string } | { group: string }; role: string };
+
+/** The groups a group grant can match: the actor's own, none for anonymous, empty slugs dropped. */
+function groupsOf(ctx: ServiceContext): readonly string[] {
+  return issuesPolicy.subjects(principalOf(ctx.actor)).groups;
+}
 
 /** A non-admin's level: the higher of their role's level and the public floor. */
 function levelOf(
   ctx: ServiceContext,
   visibility: Visibility,
   role: string | undefined,
+  groupGrants: readonly { group_slug: string; role: string }[] = [],
 ): AccessLevel {
+  const grants: Grant[] = groupGrants.map((g) => ({ to: { group: g.group_slug }, role: g.role }));
+  if (role) grants.push({ to: { user: ctx.actor.id }, role });
   return issuesPolicy.resolve(principalOf(ctx.actor), {
     floor: visibility === 'public' ? 'read' : 'none',
-    grants: role ? [{ to: { user: ctx.actor.id }, role }] : [],
+    grants,
   });
 }
 
@@ -70,10 +79,19 @@ export async function projectLevel(
     .where('project_id', '=', project.id)
     .where('user_id', '=', ctx.actor.id)
     .executeTakeFirst();
-  return levelOf(ctx, project.visibility, member?.role);
+  const groups = groupsOf(ctx);
+  const groupGrants = groups.length
+    ? await db
+        .selectFrom('project_group_grants')
+        .select(['group_slug', 'role'])
+        .where('project_id', '=', project.id)
+        .where('group_slug', 'in', [...groups])
+        .execute()
+    : [];
+  return levelOf(ctx, project.visibility, member?.role, groupGrants);
 }
 
-/** `projectLevel` for many projects, from one membership query. Keyed by project id. */
+/** `projectLevel` for many projects, from one membership query and one group-grant query. Keyed by project id. */
 export async function projectLevels(
   ctx: ServiceContext,
   db: Exec,
@@ -89,7 +107,23 @@ export async function projectLevels(
       .execute();
     for (const r of rows) roles.set(r.project_id, r.role);
   }
-  return new Map(projects.map((p) => [p.id, levelOf(ctx, p.visibility, roles.get(p.id))]));
+  const groupGrants = new Map<string, { group_slug: string; role: string }[]>();
+  const groups = groupsOf(ctx);
+  if (groups.length && projects.length) {
+    const rows = await db
+      .selectFrom('project_group_grants')
+      .select(['project_id', 'group_slug', 'role'])
+      .where('group_slug', 'in', [...groups])
+      .execute();
+    for (const r of rows) {
+      const list = groupGrants.get(r.project_id) ?? [];
+      list.push(r);
+      groupGrants.set(r.project_id, list);
+    }
+  }
+  return new Map(
+    projects.map((p) => [p.id, levelOf(ctx, p.visibility, roles.get(p.id), groupGrants.get(p.id))]),
+  );
 }
 
 /**
@@ -119,6 +153,7 @@ export function requireLevel(
 export async function readableProjectIds(ctx: ServiceContext, db: Exec): Promise<'all' | string[]> {
   if (unrestricted(ctx)) return 'all';
   const actor = ctx.actor;
+  const groups = groupsOf(ctx);
   const rows = await db
     .selectFrom('projects')
     .select('id')
@@ -132,6 +167,18 @@ export async function readableProjectIds(ctx: ServiceContext, db: Exec): Promise
               'in',
               eb.selectFrom('project_members').select('project_id').where('user_id', '=', actor.id),
             ),
+            ...(groups.length
+              ? [
+                  eb(
+                    'id',
+                    'in',
+                    eb
+                      .selectFrom('project_group_grants')
+                      .select('project_id')
+                      .where('group_slug', 'in', [...groups]),
+                  ),
+                ]
+              : []),
           ]),
     )
     .execute();
@@ -139,8 +186,8 @@ export async function readableProjectIds(ctx: ServiceContext, db: Exec): Promise
 }
 
 /**
- * Ids of projects the actor can write in, or `'all'` for admins and the system actor. Only a membership grants
- * write, so anonymous actors get none. Used to show soft-deleted content, which needs write.
+ * Ids of projects the actor can write in, or `'all'` for admins and the system actor. Only a membership or group grant gives
+ * write (direct, or through a group), so anonymous actors get none. Used to show soft-deleted content, which needs write.
  */
 export async function writableProjectIds(ctx: ServiceContext, db: Exec): Promise<'all' | string[]> {
   if (unrestricted(ctx)) return 'all';
@@ -151,7 +198,18 @@ export async function writableProjectIds(ctx: ServiceContext, db: Exec): Promise
     .where('user_id', '=', ctx.actor.id)
     .where('role', 'in', WRITE_ROLES)
     .execute();
-  return rows.map((r) => r.project_id);
+  const ids = new Set(rows.map((r) => r.project_id));
+  const groups = groupsOf(ctx);
+  if (groups.length) {
+    const viaGroup = await db
+      .selectFrom('project_group_grants')
+      .select('project_id')
+      .where('group_slug', 'in', [...groups])
+      .where('role', 'in', WRITE_ROLES)
+      .execute();
+    for (const r of viaGroup) ids.add(r.project_id);
+  }
+  return [...ids];
 }
 
 /**
