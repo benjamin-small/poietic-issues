@@ -686,7 +686,7 @@ export interface paths {
         };
         /**
          * Get a project
-         * @description Public projects are readable by anyone, private ones by members and admins; others get `NOT_FOUND`.
+         * @description Public projects are readable by anyone, private ones by members, holders of a group grant, and admins; others get `NOT_FOUND`.
          */
         get: {
             parameters: {
@@ -5863,7 +5863,7 @@ export interface components {
             myAccess: "read" | "write" | "manage";
         };
         /**
-         * @description `public`: anyone can read, even signed out. `private`: members and admins only.
+         * @description `public`: anyone can read, even signed out. `private`: members, holders of a group grant, and admins only.
          * @enum {string}
          */
         ProjectVisibility: "public" | "private";

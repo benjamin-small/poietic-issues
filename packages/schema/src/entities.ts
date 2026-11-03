@@ -108,7 +108,8 @@ export const ProjectKeySchema = z
 
 export const ProjectVisibilitySchema = z.enum(['public', 'private']).meta({
   id: 'ProjectVisibility',
-  description: '`public`: anyone can read, even signed out. `private`: members and admins only.',
+  description:
+    '`public`: anyone can read, even signed out. `private`: members, holders of a group grant, and admins only.',
 });
 export type ProjectVisibility = z.infer<typeof ProjectVisibilitySchema>;
 
