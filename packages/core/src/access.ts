@@ -1,21 +1,41 @@
+import { type Principal, definePolicy } from '@poietic-tech/access';
 import { type Database, type Kysely, type RawBuilder, sql } from '@poietic-tech/issues-db';
-import type { ServiceContext } from './context.ts';
+import type { Actor, ServiceContext } from './context.ts';
 import { DomainError, forbidden, notFound } from './errors.ts';
 
 type Exec = Kysely<Database>;
 
+/**
+ * The tracker's access policy (ADR 0021, decided by `@poietic-tech/access`): ordered levels, the level each
+ * project role gives, and the bypass for admins and the system actor.
+ */
+export const issuesPolicy = definePolicy({
+  levels: ['none', 'read', 'write', 'manage'],
+  roles: { viewer: 'read', editor: 'write', manager: 'manage' },
+  adminRole: 'admin',
+  unrestrictedKinds: ['system'],
+});
+
 /** Access an actor has to one project (ADR 0021). Ordered: each level includes the ones before it. */
-export type AccessLevel = 'none' | 'read' | 'write' | 'manage';
-const ORDER: Record<AccessLevel, number> = { none: 0, read: 1, write: 2, manage: 3 };
-const ROLE_LEVEL = { viewer: 'read', editor: 'write', manager: 'manage' } as const;
-type Role = keyof typeof ROLE_LEVEL;
+export type AccessLevel = (typeof issuesPolicy.levels)[number];
+type Role = keyof typeof issuesPolicy.roles;
 /** Roles that grant at least `write` (the public floor is only `read`). */
-const WRITE_ROLES = (Object.keys(ROLE_LEVEL) as Role[]).filter(
-  (r) => ORDER[ROLE_LEVEL[r]] >= ORDER.write,
+const WRITE_ROLES = (Object.keys(issuesPolicy.roles) as Role[]).filter((r) =>
+  issuesPolicy.atLeast(issuesPolicy.levelOfRole(r), 'write'),
 );
 
+/** The actor as the access library sees them. Groups arrive with ADR 0031 layer 3. */
+export function principalOf(actor: Actor): Principal {
+  return {
+    id: actor.id,
+    kind: actor.kind,
+    role: actor.role,
+    groups: actor.groups,
+  };
+}
+
 export function atLeast(have: AccessLevel, need: AccessLevel): boolean {
-  return ORDER[have] >= ORDER[need];
+  return issuesPolicy.atLeast(have, need);
 }
 
 /** Admins and the system actor: every project at `manage`. */
@@ -26,10 +46,15 @@ export function unrestricted(ctx: ServiceContext): boolean {
 type Visibility = 'public' | 'private';
 
 /** A non-admin's level: the higher of their role's level and the public floor. */
-function levelOf(visibility: Visibility, role: Role | undefined): AccessLevel {
-  const floor: AccessLevel = visibility === 'public' ? 'read' : 'none';
-  const fromRole: AccessLevel = role ? ROLE_LEVEL[role] : 'none';
-  return atLeast(fromRole, floor) ? fromRole : floor;
+function levelOf(
+  ctx: ServiceContext,
+  visibility: Visibility,
+  role: string | undefined,
+): AccessLevel {
+  return issuesPolicy.resolve(principalOf(ctx.actor), {
+    floor: visibility === 'public' ? 'read' : 'none',
+    grants: role ? [{ to: { user: ctx.actor.id }, role }] : [],
+  });
 }
 
 export async function projectLevel(
@@ -38,14 +63,14 @@ export async function projectLevel(
   project: { id: string; visibility: Visibility },
 ): Promise<AccessLevel> {
   if (unrestricted(ctx)) return 'manage';
-  if (ctx.actor.kind === 'anonymous') return levelOf(project.visibility, undefined);
+  if (ctx.actor.kind === 'anonymous') return levelOf(ctx, project.visibility, undefined);
   const member = await db
     .selectFrom('project_members')
     .select('role')
     .where('project_id', '=', project.id)
     .where('user_id', '=', ctx.actor.id)
     .executeTakeFirst();
-  return levelOf(project.visibility, member?.role);
+  return levelOf(ctx, project.visibility, member?.role);
 }
 
 /** `projectLevel` for many projects, from one membership query. Keyed by project id. */
@@ -55,7 +80,7 @@ export async function projectLevels(
   projects: ReadonlyArray<{ id: string; visibility: Visibility }>,
 ): Promise<Map<string, AccessLevel>> {
   if (unrestricted(ctx)) return new Map(projects.map((p) => [p.id, 'manage']));
-  const roles = new Map<string, Role>();
+  const roles = new Map<string, string>();
   if (ctx.actor.kind !== 'anonymous' && projects.length) {
     const rows = await db
       .selectFrom('project_members')
@@ -64,7 +89,7 @@ export async function projectLevels(
       .execute();
     for (const r of rows) roles.set(r.project_id, r.role);
   }
-  return new Map(projects.map((p) => [p.id, levelOf(p.visibility, roles.get(p.id))]));
+  return new Map(projects.map((p) => [p.id, levelOf(ctx, p.visibility, roles.get(p.id))]));
 }
 
 /**
@@ -78,9 +103,10 @@ export function requireLevel(
   what: string,
   ref: string,
 ): void {
-  if (atLeast(have, need)) return;
-  if (have === 'none') throw notFound(what, ref);
-  if (ctx.actor.kind === 'anonymous')
+  const outcome = issuesPolicy.check(principalOf(ctx.actor), have, need);
+  if (outcome === 'ok') return;
+  if (outcome === 'not_found') throw notFound(what, ref);
+  if (outcome === 'unauthenticated')
     throw new DomainError('UNAUTHENTICATED', 'Sign in to make changes');
   throw forbidden(
     need === 'manage'

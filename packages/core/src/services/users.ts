@@ -17,8 +17,18 @@ import { getUserRow } from '../refs.ts';
 /** Handles that resolve to something else (`me` is the actor, `system` the system user). */
 export const RESERVED_HANDLES: ReadonlySet<string> = new Set(['me', 'system']);
 
-export function toActor(user: Pick<User, 'id' | 'handle' | 'name' | 'kind' | 'role'>): Actor {
-  return { id: user.id, handle: user.handle, name: user.name, kind: user.kind, role: user.role };
+export function toActor(
+  user: Pick<User, 'id' | 'handle' | 'name' | 'kind' | 'role'>,
+  groups: readonly string[] = [],
+): Actor {
+  return {
+    id: user.id,
+    handle: user.handle,
+    name: user.name,
+    kind: user.kind,
+    role: user.role,
+    groups,
+  };
 }
 
 /** The handle of a user's owner, for `toUser`; null when the user has none. */

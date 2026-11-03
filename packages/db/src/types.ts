@@ -37,6 +37,8 @@ export interface SessionsTable {
   user_id: string;
   created_at: Timestamp;
   expires_at: Timestamp;
+  /** JSON array of the auth groups the session was signed in with; `'[]'` when none. */
+  groups: string;
 }
 
 export interface UserIdentitiesTable {

@@ -8,6 +8,8 @@ export interface Actor {
   name: string;
   kind: 'human' | 'agent' | 'system' | 'anonymous';
   role: 'admin' | 'member';
+  /** The auth.poietic.tech groups the credential carries; `[]` when it has none or the transport has no groups. */
+  groups: readonly string[];
 }
 
 export interface Clock {
@@ -42,6 +44,7 @@ export const SYSTEM_ACTOR: Actor = {
   name: 'System',
   kind: 'system',
   role: 'admin',
+  groups: [],
 };
 
 /**
@@ -54,6 +57,7 @@ export const ANONYMOUS_ACTOR: Actor = {
   name: 'Anonymous',
   kind: 'anonymous',
   role: 'member',
+  groups: [],
 };
 
 export function isAnonymous(ctx: Pick<ServiceContext, 'actor'>): boolean {

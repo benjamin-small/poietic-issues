@@ -191,7 +191,7 @@ async function identityActor(
       'PENDING_APPROVAL',
       `@${user.handle} is waiting for an admin to approve access`,
     );
-  return { actor: toActor(user), expiresAt: new Date(claims.exp * 1000) };
+  return { actor: toActor(user, claims.groups), expiresAt: new Date(claims.exp * 1000) };
 }
 
 /**
