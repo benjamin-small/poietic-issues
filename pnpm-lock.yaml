@@ -268,6 +268,9 @@ importers:
 
   packages/core:
     dependencies:
+      '@poietic-tech/access':
+        specifier: ^0.1.0
+        version: 0.1.0
       '@poietic-tech/issues-db':
         specifier: workspace:*
         version: link:../db
@@ -864,6 +867,10 @@ packages:
     resolution: {integrity: sha512-oxMK4vllB9RK5NQ2l1pq1IfOf2AvnEuj/vYGDj0H2nMtmtZpKtCwt/l00GEO6xjGfpBNAvjovvYdCm50dRQkpQ==}
     engines: {node: '>=20'}
     hasBin: true
+
+  '@poietic-tech/access@0.1.0':
+    resolution: {integrity: sha512-ddLBETCs6busNpgovdFmGl5oDWrtuk/Kc1coZwM/fIvszsYrKutlCJbDL2Nggp0XYIYKXuinO4CdAdbxx4YXMw==}
+    engines: {node: '>=20'}
 
   '@poietic-tech/auth@0.4.2':
     resolution: {integrity: sha512-C+ZkKaI4O/FDBCbNADvyGNVOVsX9kwKkb1yjZ6tSEshg8yNz4A8QtO0sE4Y/vM3pMFp46kHUWCTX/oAGjumxBw==}
@@ -3547,6 +3554,8 @@ snapshots:
   '@playwright/test@1.63.0':
     dependencies:
       playwright: 1.63.0
+
+  '@poietic-tech/access@0.1.0': {}
 
   '@poietic-tech/auth@0.4.2': {}
 

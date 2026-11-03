@@ -12,6 +12,7 @@
     "typecheck": "tsc -p ."
   },
   "dependencies": {
+    "@poietic-tech/access": "^0.1.0",
     "@poietic-tech/issues-db": "workspace:*",
     "@poietic-tech/issues-schema": "workspace:*",
     "aws4fetch": "^1.0.20",
