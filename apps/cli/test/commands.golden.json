@@ -864,7 +864,7 @@
         {
           "flags": "--visibility <visibility>",
           "name": "visibility",
-          "description": "public: anyone can read; private (default): members and admins",
+          "description": "public: anyone can read; private (default): members, holders of a group grant, and admins",
           "required": false,
           "takesValue": true
         }
@@ -900,7 +900,7 @@
         {
           "flags": "--visibility <visibility>",
           "name": "visibility",
-          "description": "public: anyone can read; private: members and admins",
+          "description": "public: anyone can read; private: members, holders of a group grant, and admins",
           "required": false,
           "takesValue": true
         },

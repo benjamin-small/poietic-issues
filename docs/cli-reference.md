@@ -348,7 +348,7 @@ Create a project with the default workflow (admin)
 | `-k, --key <KEY>` | issue key prefix, e.g. ENG (immutable) **(required)** |
 | `-n, --name <name>` | name **(required)** |
 | `--description <text>` | description |
-| `--visibility <visibility>` | public: anyone can read; private (default): members and admins |
+| `--visibility <visibility>` | public: anyone can read; private (default): members, holders of a group grant, and admins |
 
 ### `poietic-tech issues project edit [project]`
 
@@ -362,7 +362,7 @@ Edit a project
 | --- | --- |
 | `-n, --name <name>` | name |
 | `--description <text>` | description |
-| `--visibility <visibility>` | public: anyone can read; private: members and admins |
+| `--visibility <visibility>` | public: anyone can read; private: members, holders of a group grant, and admins |
 | `--archive` | archive the project (admin) |
 | `--unarchive` | unarchive the project (admin) |
 
