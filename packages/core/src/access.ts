@@ -30,7 +30,7 @@ export function principalOf(actor: Actor): Principal {
     id: actor.id,
     kind: actor.kind,
     role: actor.role,
-    groups: (actor as Actor & { groups?: readonly string[] }).groups ?? [],
+    groups: actor.groups,
   };
 }
 

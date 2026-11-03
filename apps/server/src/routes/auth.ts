@@ -81,9 +81,14 @@ export function registerAuthRoutes(app: TrackerApp, deps: ResolvedDeps) {
     }
   }
 
-  async function startSession(c: Context<AppEnv>, userId: string, ttlMs?: number) {
+  async function startSession(
+    c: Context<AppEnv>,
+    userId: string,
+    ttlMs?: number,
+    groups: readonly string[] = [],
+  ) {
     const ctx = c.get('ctx');
-    const session = await createSession(ctx, userId, ttlMs);
+    const session = await createSession(ctx, userId, ttlMs, groups);
     setCookie(c, SESSION_COOKIE, session.cookie, {
       httpOnly: true,
       sameSite: 'Lax',
@@ -231,7 +236,7 @@ export function registerAuthRoutes(app: TrackerApp, deps: ResolvedDeps) {
         );
       // A renewal replaces the session it renews, so the old cookie stops working at once.
       await dropSessions(c);
-      await startSession(c, user.id, sso.sessionTtlMs ?? SSO_SESSION_TTL_MS);
+      await startSession(c, user.id, sso.sessionTtlMs ?? SSO_SESSION_TTL_MS, claims.groups);
       return c.json(user, 200);
     },
   );

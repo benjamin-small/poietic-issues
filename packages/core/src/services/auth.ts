@@ -19,6 +19,7 @@ export async function createSession(
   ctx: Pick<ServiceContext, 'db' | 'clock'>,
   userId: string,
   ttlMs: number = SESSION_TTL_MS,
+  groups: readonly string[] = [],
 ): Promise<{ cookie: string; expiresAt: string }> {
   const cookie = randomBytes(32).toString('base64url');
   const now = ctx.clock.now();
@@ -36,10 +37,21 @@ export async function createSession(
         user_id: userId,
         created_at: now.toISOString(),
         expires_at: expiresAt,
+        groups: JSON.stringify(groups),
       })
       .execute();
   });
   return { cookie, expiresAt };
+}
+
+/** The groups column is JSON written by `createSession`; anything that isn't an array of strings means none. */
+function parseGroups(raw: string): string[] {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.every((g) => typeof g === 'string') ? parsed : [];
+  } catch {
+    return [];
+  }
 }
 
 /** The session's user and when the session ends, or null for an unknown, expired or deactivated one. */
@@ -51,12 +63,15 @@ export async function authenticateSession(
     .selectFrom('sessions')
     .innerJoin('users', 'users.id', 'sessions.user_id')
     .selectAll('users')
-    .select('sessions.expires_at as session_expires_at')
+    .select(['sessions.expires_at as session_expires_at', 'sessions.groups as session_groups'])
     .where('sessions.id', '=', sha256(cookie))
     .executeTakeFirst();
   if (!row || row.deactivated_at || row.session_expires_at <= ctx.clock.now().toISOString())
     return null;
-  return { actor: toActor(row), expiresAt: row.session_expires_at };
+  return {
+    actor: toActor(row, parseGroups(row.session_groups)),
+    expiresAt: row.session_expires_at,
+  };
 }
 
 export async function deleteSession(

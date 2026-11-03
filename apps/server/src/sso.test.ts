@@ -17,7 +17,7 @@ afterAll(() => t.destroy());
 
 /**
  * A fake verifier: the token is the subject; "admin-*" subjects carry role admin; "agent:<owner>:<n>" is an agent
- * owned by subject <owner>; "member-*" subjects are in the group "crew"; "bad" and "trk_abc" fail; "down" throws.
+ * owned by subject <owner>; "member-*" subjects are in the group "crew", "admin-grp*" in "team"; "bad" and "trk_abc" fail; "down" throws.
  */
 function sso(): SsoOptions {
   return {
@@ -38,7 +38,11 @@ function sso(): SsoOptions {
               sub: token,
               name: `Person ${token}`,
               role: token.startsWith('admin') ? 'admin' : 'user',
-              groups: token.startsWith('member-') ? ['crew'] : [],
+              groups: token.startsWith('member-')
+                ? ['crew']
+                : token.startsWith('admin-grp')
+                  ? ['team']
+                  : [],
               kind: token.startsWith('agent:') ? 'agent' : 'human',
               owner: token.startsWith('agent:') ? token.split(':')[1]! : null,
               ...(token.includes('@') && { handle: token.split('@')[1]! }),
@@ -322,6 +326,42 @@ describe(`SSO sign-in (${testDialect()})`, () => {
       const pending = await app.request(`${BASE}/api/v1/me`, bearer('u-pending'));
       expect(pending.status).toBe(403);
       expect(await code(pending)).toBe('PENDING_APPROVAL');
+    });
+
+    describe('auth groups on the request actor', () => {
+      /** An app whose `/probe` route echoes the groups the auth middleware put on the request's actor. */
+      const probed = () =>
+        createApp({
+          db: t.db,
+          auth: { mode: 'standard', sso: sso() },
+          extensions: [
+            (api) => {
+              api.get('/probe', (c) => c.json({ groups: c.get('ctx').actor.groups }));
+            },
+          ],
+        });
+      const groupsOf = async (res: Response) => ((await res.json()) as { groups: string[] }).groups;
+
+      it("a bearer request carries the token's groups", async () => {
+        const app = probed();
+        expect(
+          await groupsOf(await app.request(`${BASE}/api/v1/probe`, bearer('admin-grp1'))),
+        ).toEqual(['team']);
+      });
+
+      it('a cookie request carries the groups the session was signed in with', async () => {
+        const app = probed();
+        const cookie = (await post(app, 'admin-grp2')).headers.get('set-cookie')!.split(';')[0]!;
+        const res = await app.request(`${BASE}/api/v1/probe`, { headers: { cookie } });
+        expect(await groupsOf(res)).toEqual(['team']);
+      });
+
+      it("an agent never picks up its owner's groups", async () => {
+        const app = probed();
+        await post(app, 'admin-grp3');
+        const res = await app.request(`${BASE}/api/v1/probe`, bearer('agent:admin-grp3:a'));
+        expect(await groupsOf(res)).toEqual([]);
+      });
     });
 
     it('decides on its own: an invalid bearer is 401 even with a valid session cookie', async () => {
