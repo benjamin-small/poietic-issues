@@ -104,7 +104,7 @@ Conflicts share exit 2 with usage errors but keep their own machine code, so an 
 
 ## Project access
 
-Projects are `private` (members and admins) or `public` (anyone can read). Members have a role: `viewer`, `editor` or `manager`. A project can also grant a role to an auth group (`--group <slug>`, with `set` and `remove` too). Changing any of this needs `manage` on the project. These commands take the project from `-P`, `POIETIC_ISSUES_PROJECT` or `.poietic-issues.json`, like the rest of the CLI.
+Projects are `private` (members, holders of a group grant, and admins) or `public` (anyone can read). Members have a role: `viewer`, `editor` or `manager`. A project can also grant a role to an auth group (`--group <slug>`, with `set` and `remove` too). Changing any of this needs `manage` on the project. These commands take the project from `-P`, `POIETIC_ISSUES_PROJECT` or `.poietic-issues.json`, like the rest of the CLI.
 
 ```sh
 poietic-tech issues project edit ENG --visibility public

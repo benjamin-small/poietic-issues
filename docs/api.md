@@ -190,13 +190,13 @@ Every change is appended to the event log. Each event carries a full resource sn
 
 ## Group grants
 
-A project can grant a role to an auth.poietic.tech group, alongside its per-user members (needs `manage`; [ADR 0031](adr/0031-global-identity-local-access.md)):
+A project can grant a role to an auth.poietic.tech group, alongside its per-user members ([ADR 0031](adr/0031-global-identity-local-access.md)):
 
-- `GET /projects/{project}/group-grants` lists the grants.
-- `PUT /projects/{project}/group-grants/{group}` sets a group's role (`viewer`, `editor` or `manager`), creating the grant or changing it. `{group}` is the group's slug.
-- `DELETE /projects/{project}/group-grants/{group}` removes it.
+- `GET /projects/{project}/group-grants` lists the grants (needs `read`).
+- `PUT /projects/{project}/group-grants/{group}` sets a group's role (`viewer`, `editor` or `manager`), creating the grant or changing it (needs `manage`). `{group}` is the group's slug.
+- `DELETE /projects/{project}/group-grants/{group}` removes it (needs `manage`).
 
-They emit `project.group_grant_added`, `_changed` and `_removed` ([events.md](events.md)). A caller's level on a project is the highest of their direct membership and the grants for their current groups.
+They emit `project.group_grant_added`, `_changed` and `_removed` ([events.md](events.md)). A caller's level on a project is the highest of their direct membership and the grants for the groups their credential carries: a bearer token carries the groups it was issued with, a cookie session the groups it was created with. See [security.md](security.md) for when a change of groups at auth takes effect.
 
 ## Discovery for agents
 
