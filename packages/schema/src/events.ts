@@ -7,6 +7,7 @@ import {
   IssueRefSchema,
   IssueSchema,
   LabelSchema,
+  ProjectGroupGrantSchema,
   ProjectMemberSchema,
   ProjectRepoSchema,
   ProjectRoleSchema,
@@ -35,6 +36,9 @@ export const EVENT_TYPES = [
   'project.member_added',
   'project.member_changed',
   'project.member_removed',
+  'project.group_grant_added',
+  'project.group_grant_changed',
+  'project.group_grant_removed',
   'project.repo_added',
   'project.repo_removed',
   'status.created',
@@ -96,6 +100,14 @@ export const ProjectRepoEventDataSchema = z
 export const ProjectMemberEventDataSchema = z
   .object({ ...base, member: ProjectMemberSchema, previousRole: ProjectRoleSchema.optional() })
   .meta({ id: 'ProjectMemberEventData' });
+export const ProjectGroupGrantEventDataSchema = z
+  .object({
+    ...base,
+    project: z.object({ id: z.string(), key: z.string() }),
+    grant: ProjectGroupGrantSchema,
+    previousRole: ProjectRoleSchema.optional(),
+  })
+  .meta({ id: 'ProjectGroupGrantEventData' });
 export const StatusEventDataSchema = z
   .object({ ...base, status: StatusSchema, changes: ChangesSchema.optional() })
   .meta({ id: 'StatusEventData' });
@@ -127,6 +139,9 @@ export const EVENT_DATA_SCHEMAS = {
   'project.member_added': ProjectMemberEventDataSchema,
   'project.member_changed': ProjectMemberEventDataSchema,
   'project.member_removed': ProjectMemberEventDataSchema,
+  'project.group_grant_added': ProjectGroupGrantEventDataSchema,
+  'project.group_grant_changed': ProjectGroupGrantEventDataSchema,
+  'project.group_grant_removed': ProjectGroupGrantEventDataSchema,
   'project.repo_added': ProjectRepoEventDataSchema,
   'project.repo_removed': ProjectRepoEventDataSchema,
   'status.created': StatusEventDataSchema,

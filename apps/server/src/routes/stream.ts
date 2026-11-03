@@ -23,6 +23,7 @@ const MAX_PENDING = 1000;
 /** Events after which a viewer's readable projects may differ (membership, visibility, a new project). */
 const changesAccess = (e: TrackerEvent) =>
   e.type.startsWith('project.member_') ||
+  e.type.startsWith('project.group_grant_') ||
   e.type === 'project.updated' ||
   e.type === 'project.created';
 
@@ -38,7 +39,9 @@ const canRead = (access: ProjectIdSet, projectId: string) =>
  * project made private. (Access is re-read at the current state, which may already include later changes, so the
  * event itself says whether it concerns the viewer.)
  */
-const mayEndAccess = (e: TrackerEvent, actorId: string) =>
+const mayEndAccess = (e: TrackerEvent, actorId: string, groups: readonly string[]) =>
+  (e.type === 'project.group_grant_removed' &&
+    groups.includes((e.data.grant as { group?: string } | undefined)?.group ?? '')) ||
   (e.type === 'project.member_removed' &&
     (e.data.member as { user?: { id?: string } } | undefined)?.user?.id === actorId) ||
   (e.type === 'project.updated' &&
@@ -51,7 +54,12 @@ const mayEndAccess = (e: TrackerEvent, actorId: string) =>
  */
 const withoutContent = (e: TrackerEvent, actorId: string): TrackerEvent => ({
   ...e,
-  data: e.type === 'project.member_removed' ? { member: { user: { id: actorId } } } : {},
+  data:
+    e.type === 'project.member_removed'
+      ? { member: { user: { id: actorId } } }
+      : e.type === 'project.group_grant_removed'
+        ? { grant: { group: (e.data.grant as { group: string }).group } }
+        : {},
 });
 
 /**
@@ -168,7 +176,7 @@ export function registerStreamRoute(
         if (changesAccess(first)) await readAccess();
         const lost =
           first.projectId !== null &&
-          mayEndAccess(first, ctx.actor.id) &&
+          mayEndAccess(first, ctx.actor.id, ctx.actor.groups) &&
           !canRead(readable, first.projectId);
         let n = 1;
         while (n < queue.length && !changesAccess(queue[n]!)) n++;

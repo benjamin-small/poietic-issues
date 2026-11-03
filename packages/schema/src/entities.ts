@@ -209,6 +209,30 @@ export const UpdateProjectMemberInputSchema = z
   .meta({ id: 'UpdateProjectMemberInput' });
 export type UpdateProjectMemberInput = z.input<typeof UpdateProjectMemberInputSchema>;
 
+/** An auth.poietic.tech group slug, as a project can name it in a grant. */
+export const GroupSlugSchema = z
+  .string()
+  .regex(
+    /^[a-z0-9][a-z0-9-]{0,39}$/,
+    'group must be 1–40 chars of a-z, 0-9 or "-", not starting with "-"',
+  )
+  .meta({ id: 'GroupSlug', description: 'An auth group slug.', example: 'team' });
+
+export const ProjectGroupGrantSchema = z
+  .object({
+    group: GroupSlugSchema,
+    role: ProjectRoleSchema,
+    createdAt: TimestampSchema,
+    updatedAt: TimestampSchema,
+  })
+  .meta({ id: 'ProjectGroupGrant' });
+export type ProjectGroupGrant = z.infer<typeof ProjectGroupGrantSchema>;
+
+export const SetProjectGroupGrantInputSchema = z
+  .object({ role: ProjectRoleSchema })
+  .meta({ id: 'SetProjectGroupGrantInput' });
+export type SetProjectGroupGrantInput = z.input<typeof SetProjectGroupGrantInputSchema>;
+
 export const STATUS_CATEGORIES = [
   'backlog',
   'unstarted',

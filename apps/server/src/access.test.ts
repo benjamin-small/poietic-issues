@@ -299,3 +299,43 @@ describe(`"me" as a user path parameter (${testDialect()})`, () => {
     expect((await as(undefined, 'GET', '/users/me')).status).toBe(401);
   });
 });
+
+describe(`group grant routes (${testDialect()})`, () => {
+  it('sets, lists, changes and removes a group grant over HTTP', async () => {
+    await asAdmin('/projects', { method: 'POST', body: { key: 'GGR', name: 'Grants' } });
+    const put = await as(adminToken, 'PUT', '/projects/GGR/group-grants/team', { role: 'editor' });
+    expect(put.status).toBe(200);
+    expect(await put.json()).toMatchObject({ group: 'team', role: 'editor' });
+    const list = await as(adminToken, 'GET', '/projects/GGR/group-grants');
+    expect(((await list.json()) as { data: { group: string; role: string }[] }).data).toEqual([
+      expect.objectContaining({ group: 'team', role: 'editor' }),
+    ]);
+    const again = await as(adminToken, 'PUT', '/projects/GGR/group-grants/team', {
+      role: 'viewer',
+    });
+    expect(((await again.json()) as { role: string }).role).toBe('viewer');
+
+    // Not readable: NOT_FOUND. Bad slug and bad role: 400.
+    expect((await as(memberToken, 'GET', '/projects/GGR/group-grants')).status).toBe(404);
+    expect(
+      (await as(memberToken, 'PUT', '/projects/GGR/group-grants/team', { role: 'manager' })).status,
+    ).toBe(404);
+    expect(
+      (await as(adminToken, 'PUT', '/projects/GGR/group-grants/Bad_Slug', { role: 'viewer' }))
+        .status,
+    ).toBe(400);
+    expect(
+      (await as(adminToken, 'PUT', '/projects/GGR/group-grants/team', { role: 'boss' })).status,
+    ).toBe(400);
+
+    expect((await as(adminToken, 'DELETE', '/projects/GGR/group-grants/team')).status).toBe(204);
+    expect((await as(adminToken, 'DELETE', '/projects/GGR/group-grants/team')).status).toBe(404);
+    expect(
+      (
+        (await (await as(adminToken, 'GET', '/projects/GGR/group-grants')).json()) as {
+          data: unknown[];
+        }
+      ).data,
+    ).toEqual([]);
+  });
+});

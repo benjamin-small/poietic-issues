@@ -60,6 +60,9 @@
               "project.member_added",
               "project.member_changed",
               "project.member_removed",
+              "project.group_grant_added",
+              "project.group_grant_changed",
+              "project.group_grant_removed",
               "project.repo_added",
               "project.repo_removed",
               "status.created",
@@ -1038,6 +1041,52 @@
         ]
       },
       "UpdateProjectMemberInput": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "$ref": "#/components/schemas/ProjectRole"
+          }
+        },
+        "required": [
+          "role"
+        ]
+      },
+      "ProjectGroupGrant": {
+        "type": "object",
+        "properties": {
+          "group": {
+            "$ref": "#/components/schemas/GroupSlug"
+          },
+          "role": {
+            "$ref": "#/components/schemas/ProjectRole"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO-8601 UTC timestamp.",
+            "example": "2026-09-26T13:49:00.123Z"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO-8601 UTC timestamp.",
+            "example": "2026-09-26T13:49:00.123Z"
+          }
+        },
+        "required": [
+          "group",
+          "role",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "GroupSlug": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+        "description": "An auth group slug.",
+        "example": "team"
+      },
+      "SetProjectGroupGrantInput": {
         "type": "object",
         "properties": {
           "role": {
@@ -5001,6 +5050,247 @@
         }
       }
     },
+    "/projects/{project}/group-grants": {
+      "get": {
+        "tags": [
+          "Project access"
+        ],
+        "summary": "List the groups granted a role on a project",
+        "description": "Anyone who can read the project can see its group grants. A grant gives every member of an auth.poietic.tech group a role on the project.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "ENG"
+            },
+            "required": true,
+            "name": "project",
+            "in": "path",
+            "description": "Project key (e.g. `ENG`) or id."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Group grants",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ProjectGroupGrant"
+                      }
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Problem details. Codes: VALIDATION_FAILED.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Problem details. Codes: UNAUTHENTICATED.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Problem details. Codes: NOT_FOUND.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{project}/group-grants/{group}": {
+      "put": {
+        "tags": [
+          "Project access"
+        ],
+        "summary": "Give a group a role on a project",
+        "description": "Needs manage on the project. Creates the grant or changes its role; the same role again changes nothing.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "ENG"
+            },
+            "required": true,
+            "name": "project",
+            "in": "path",
+            "description": "Project key (e.g. `ENG`) or id."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "example": "team"
+            },
+            "required": true,
+            "name": "group",
+            "in": "path",
+            "description": "Auth group slug (lowercase letters, digits and `-`)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetProjectGroupGrantInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The grant",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectGroupGrant"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Problem details. Codes: VALIDATION_FAILED.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Problem details. Codes: UNAUTHENTICATED.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Problem details. Codes: FORBIDDEN.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Problem details. Codes: NOT_FOUND.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Project access"
+        ],
+        "summary": "Remove a group's role on a project",
+        "description": "Needs manage on the project. `NOT_FOUND` if the group has no grant.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "ENG"
+            },
+            "required": true,
+            "name": "project",
+            "in": "path",
+            "description": "Project key (e.g. `ENG`) or id."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "example": "team"
+            },
+            "required": true,
+            "name": "group",
+            "in": "path",
+            "description": "Auth group slug (lowercase letters, digits and `-`)."
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Removed."
+          },
+          "400": {
+            "description": "Problem details. Codes: VALIDATION_FAILED.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Problem details. Codes: UNAUTHENTICATED.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Problem details. Codes: FORBIDDEN.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Problem details. Codes: NOT_FOUND.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/projects/{project}/repos": {
       "post": {
         "tags": [
@@ -7299,10 +7589,10 @@
           {
             "schema": {
               "type": "string",
-              "description": "Comma-separated event types: issue.created, issue.updated, issue.deleted, issue.restored, comment.created, comment.updated, comment.deleted, link.created, link.deleted, project.created, project.updated, project.member_added, project.member_changed, project.member_removed, project.repo_added, project.repo_removed, status.created, status.updated, status.deleted, label.created, label.updated, label.deleted, user.created, user.updated, field.created, field.updated, field.deleted, attachment.created, attachment.deleted."
+              "description": "Comma-separated event types: issue.created, issue.updated, issue.deleted, issue.restored, comment.created, comment.updated, comment.deleted, link.created, link.deleted, project.created, project.updated, project.member_added, project.member_changed, project.member_removed, project.group_grant_added, project.group_grant_changed, project.group_grant_removed, project.repo_added, project.repo_removed, status.created, status.updated, status.deleted, label.created, label.updated, label.deleted, user.created, user.updated, field.created, field.updated, field.deleted, attachment.created, attachment.deleted."
             },
             "required": false,
-            "description": "Comma-separated event types: issue.created, issue.updated, issue.deleted, issue.restored, comment.created, comment.updated, comment.deleted, link.created, link.deleted, project.created, project.updated, project.member_added, project.member_changed, project.member_removed, project.repo_added, project.repo_removed, status.created, status.updated, status.deleted, label.created, label.updated, label.deleted, user.created, user.updated, field.created, field.updated, field.deleted, attachment.created, attachment.deleted.",
+            "description": "Comma-separated event types: issue.created, issue.updated, issue.deleted, issue.restored, comment.created, comment.updated, comment.deleted, link.created, link.deleted, project.created, project.updated, project.member_added, project.member_changed, project.member_removed, project.group_grant_added, project.group_grant_changed, project.group_grant_removed, project.repo_added, project.repo_removed, status.created, status.updated, status.deleted, label.created, label.updated, label.deleted, user.created, user.updated, field.created, field.updated, field.deleted, attachment.created, attachment.deleted.",
             "name": "types",
             "in": "query"
           }

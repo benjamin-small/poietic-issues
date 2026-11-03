@@ -946,16 +946,23 @@
     {
       "name": "project members add",
       "aliases": [],
-      "description": "Give a user a role on the project (needs manage)",
+      "description": "Give a user (or, with --group, an auth group) a role on the project (needs manage)",
       "arguments": [
         {
           "name": "user",
-          "required": true,
+          "required": false,
           "variadic": false,
           "description": "handle, @handle or user id"
         }
       ],
       "options": [
+        {
+          "flags": "--group <slug>",
+          "name": "group",
+          "description": "an auth group (by its slug) instead of a user",
+          "required": false,
+          "takesValue": true
+        },
         {
           "flags": "--role <role>",
           "name": "role",
@@ -968,16 +975,23 @@
     {
       "name": "project members set",
       "aliases": [],
-      "description": "Change a member's role (needs manage)",
+      "description": "Change a member's role, or a group's (needs manage)",
       "arguments": [
         {
           "name": "user",
-          "required": true,
+          "required": false,
           "variadic": false,
           "description": "handle, @handle or user id"
         }
       ],
       "options": [
+        {
+          "flags": "--group <slug>",
+          "name": "group",
+          "description": "an auth group (by its slug) instead of a user",
+          "required": false,
+          "takesValue": true
+        },
         {
           "flags": "--role <role>",
           "name": "role",
@@ -992,16 +1006,24 @@
       "aliases": [
         "rm"
       ],
-      "description": "Remove a user's role on the project (needs manage)",
+      "description": "Remove a user's role on the project, or a group's (needs manage)",
       "arguments": [
         {
           "name": "user",
-          "required": true,
+          "required": false,
           "variadic": false,
           "description": "handle, @handle or user id"
         }
       ],
-      "options": []
+      "options": [
+        {
+          "flags": "--group <slug>",
+          "name": "group",
+          "description": "an auth group (by its slug) instead of a user",
+          "required": false,
+          "takesValue": true
+        }
+      ]
     },
     {
       "name": "project repo list",

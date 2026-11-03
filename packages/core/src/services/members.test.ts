@@ -1,6 +1,14 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { testDialect } from '@poietic-tech/issues-db/testing';
-import { addMember, listMembers, removeMember, updateMember } from './members.ts';
+import {
+  addMember,
+  listGroupGrants,
+  listMembers,
+  removeGroupGrant,
+  removeMember,
+  setGroupGrant,
+  updateMember,
+} from './members.ts';
 import { createProject, getProject, listProjects, updateProject } from './projects.ts';
 import { listEvents } from './events.ts';
 import { ANONYMOUS_ACTOR, withActor } from '../context.ts';
@@ -216,5 +224,106 @@ describe(`project members (${testDialect()})`, () => {
       await grant(t, 'NAME', t.agent, 'manager');
       expect((await updateProject(t.agent, 'NAME', { name: 'Renamed' })).name).toBe('Renamed');
     });
+  });
+});
+
+describe(`project group grants (${testDialect()})`, () => {
+  let t: TestContext;
+  beforeAll(async () => {
+    t = await createTestContext();
+  });
+  afterAll(() => t.destroy());
+
+  const grantEvents = async (projectId: string) =>
+    (await listEvents(t.ctx, { project: projectId, limit: 1000 })).data.filter((e) =>
+      e.type.startsWith('project.group_grant_'),
+    );
+
+  it('set then change then remove records added, changed, removed', async () => {
+    const p = await createProject(t.ctx, { key: 'GG', name: 'GG' });
+    const added = await setGroupGrant(t.ctx, 'GG', 'team', { role: 'viewer' });
+    expect(added).toMatchObject({ group: 'team', role: 'viewer' });
+    const changed = await setGroupGrant(t.ctx, 'GG', 'team', { role: 'editor' });
+    expect(changed).toMatchObject({ group: 'team', role: 'editor', createdAt: added.createdAt });
+    expect(await listGroupGrants(t.ctx, 'GG')).toEqual([changed]);
+    await removeGroupGrant(t.ctx, 'GG', 'team');
+    expect(await listGroupGrants(t.ctx, 'GG')).toEqual([]);
+    const events = await grantEvents(p.id);
+    expect(events.map((e) => e.type)).toEqual([
+      'project.group_grant_added',
+      'project.group_grant_changed',
+      'project.group_grant_removed',
+    ]);
+    expect(events[0]!.data).toMatchObject({
+      project: { id: p.id, key: 'GG' },
+      grant: { group: 'team' },
+    });
+    expect(events[1]!.data).toMatchObject({ previousRole: 'viewer' });
+    expect(JSON.stringify(events)).not.toContain('@');
+  });
+
+  it('setting the same role again records nothing', async () => {
+    const p = await createProject(t.ctx, { key: 'GSAME', name: 'Same' });
+    const first = await setGroupGrant(t.ctx, 'GSAME', 'team', { role: 'editor' });
+    const again = await setGroupGrant(t.ctx, 'GSAME', 'team', { role: 'editor' });
+    expect(again).toEqual(first);
+    expect(await grantEvents(p.id)).toHaveLength(1);
+  });
+
+  it('removing an absent grant is NOT_FOUND and records nothing', async () => {
+    const p = await createProject(t.ctx, { key: 'GABS', name: 'Absent' });
+    await expect(removeGroupGrant(t.ctx, 'GABS', 'team')).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
+    expect(await grantEvents(p.id)).toHaveLength(0);
+  });
+
+  it('an editor cannot set or remove a grant (FORBIDDEN)', async () => {
+    await createProject(t.ctx, { key: 'GPERM', name: 'Perm' });
+    await grant(t, 'GPERM', t.agent, 'editor');
+    await setGroupGrant(t.ctx, 'GPERM', 'team', { role: 'viewer' });
+    await expect(
+      setGroupGrant(t.agent, 'GPERM', 'team', { role: 'manager' }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(removeGroupGrant(t.agent, 'GPERM', 'team')).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+    expect((await listGroupGrants(t.agent, 'GPERM')).map((g) => g.role)).toEqual(['viewer']);
+  });
+
+  it('a non-member cannot see that a private project exists (NOT_FOUND)', async () => {
+    await createProject(t.ctx, { key: 'GHID', name: 'Hidden' });
+    await expect(listGroupGrants(t.member, 'GHID')).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(setGroupGrant(t.member, 'GHID', 'team', { role: 'viewer' })).rejects.toMatchObject(
+      { code: 'NOT_FOUND' },
+    );
+    await expect(removeGroupGrant(t.member, 'GHID', 'team')).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
+  });
+
+  it('a malformed slug or role is VALIDATION_FAILED', async () => {
+    await createProject(t.ctx, { key: 'GBAD', name: 'Bad' });
+    for (const group of ['Team', '-team', '', 'a b', 'a'.repeat(41)]) {
+      await expect(setGroupGrant(t.ctx, 'GBAD', group, { role: 'viewer' })).rejects.toMatchObject({
+        code: 'VALIDATION_FAILED',
+      });
+      await expect(removeGroupGrant(t.ctx, 'GBAD', group)).rejects.toMatchObject({
+        code: 'VALIDATION_FAILED',
+      });
+    }
+    await expect(
+      setGroupGrant(t.ctx, 'GBAD', 'team', { role: 'boss' as 'viewer' }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    expect(await listGroupGrants(t.ctx, 'GBAD')).toEqual([]);
+  });
+
+  it('a grant gives its group members access', async () => {
+    await createProject(t.ctx, { key: 'GACC', name: 'Access' });
+    const viaTeam = withActor(t.member, { ...t.member.actor, groups: ['team'] });
+    await expect(listGroupGrants(viaTeam, 'GACC')).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await setGroupGrant(t.ctx, 'GACC', 'team', { role: 'manager' });
+    expect((await listGroupGrants(viaTeam, 'GACC')).map((g) => g.group)).toEqual(['team']);
+    await removeGroupGrant(viaTeam, 'GACC', 'team');
   });
 });

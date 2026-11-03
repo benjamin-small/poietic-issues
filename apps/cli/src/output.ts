@@ -98,7 +98,8 @@ export const COLUMNS: Record<Exclude<Kind, 'raw'>, Column[]> = {
     ['ID', (r) => r.id],
   ],
   member: [
-    ['USER', (r) => actor(r.user)],
+    ['KIND', (r) => r.kind ?? 'user'],
+    ['MEMBER', (r) => (r.kind === 'group' ? r.group : actor(r.user))],
     ['ROLE', (r) => r.role],
     ['SINCE', (r) => date(r.createdAt)],
   ],
@@ -178,7 +179,10 @@ export function identifier(kind: Kind, row: Row): string {
   if (kind === 'issue' || kind === 'project' || kind === 'linkType' || kind === 'field')
     return String(row.key ?? row.id);
   if (kind === 'event') return String(row.seq);
-  if (kind === 'member') return String((row.user as { handle: string }).handle);
+  if (kind === 'member')
+    return row.kind === 'group'
+      ? String(row.group)
+      : String((row.user as { handle: string }).handle);
   return String(row.id ?? '');
 }
 
