@@ -14,7 +14,7 @@
   import type { Project } from '../api.ts';
   import { live } from '../live.svelte.ts';
   import { current, href } from '../nav.ts';
-  import { canWrite, isSignedIn, type Me } from '../queries.ts';
+  import { canWrite, isAdmin as isAdminMe, isSignedIn, type Me } from '../queries.ts';
   import { signOut } from '../session.ts';
   import { applyTheme } from '../theme.ts';
   import { openCreateIssue, ui } from '../ui.svelte.ts';
@@ -38,7 +38,7 @@
 
   const path = $derived(current().path);
   const wide = new MediaQuery('min-width: 768px');
-  const isAdmin = $derived(isSignedIn(me) && me.role === 'admin');
+  const isAdmin = $derived(isAdminMe(me));
   const access = $derived(projects.find((p) => p.key === currentProject)?.myAccess);
   const link = (active: boolean) =>
     `flex items-center gap-2 rounded-md px-2 py-1 text-sm ${active ? 'bg-bg-hover text-fg font-medium' : 'text-fg-muted hover:bg-bg-hover hover:text-fg'}`;

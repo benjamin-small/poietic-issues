@@ -1,3 +1,4 @@
+import { isAdminRole } from '@poietic-tech/issues-schema';
 import { type Actor, isAnonymous, type ServiceContext } from './context.ts';
 import { DomainError, forbidden } from './errors.ts';
 
@@ -13,12 +14,12 @@ export function requireAdmin(
   action = 'do this',
 ): asserts ctx is ServiceContext & { actor: KnownActor } {
   if (isAnonymous(ctx)) throw new DomainError('UNAUTHENTICATED', `Sign in to ${action}`);
-  if (ctx.actor.role !== 'admin') throw forbidden(`Only admins can ${action}`);
+  if (!isAdminRole(ctx.actor.role)) throw forbidden(`Only admins can ${action}`);
 }
 
-/** Admins and the system actor (whose role is admin). */
+/** Admins and the system actor (whose role is admin), by the access policy's admin role. */
 export function isAdmin(ctx: Pick<ServiceContext, 'actor'>): boolean {
-  return ctx.actor.role === 'admin';
+  return isAdminRole(ctx.actor.role);
 }
 
 /** Rejects the anonymous actor before anything is looked up, so the answer reveals nothing (ADR 0021). */

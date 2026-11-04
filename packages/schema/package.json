@@ -11,6 +11,7 @@
     "typecheck": "tsc -p ."
   },
   "dependencies": {
+    "@poietic-tech/access": "^0.1.0",
     "typeid-js": "^1.2.0",
     "zod": "^4.6.5"
   }

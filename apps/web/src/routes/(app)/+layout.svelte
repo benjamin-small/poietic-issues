@@ -3,7 +3,7 @@
   import { createQuery, useQueryClient } from '@tanstack/svelte-query';
   import { connectLive } from '$lib/live.svelte.ts';
   import { ApiError } from '$lib/api.ts';
-  import { canWrite, fetchers, isSignedIn, keys } from '$lib/queries.ts';
+  import { canWrite, fetchers, isAdmin, isSignedIn, keys } from '$lib/queries.ts';
   import { openCommand, openCreateIssue, ui } from '$lib/ui.svelte.ts';
   import { PRIORITY_LABELS } from '$lib/format.ts';
   import { bulkUpdate, cachedIssues, deleteIssues } from '$lib/issues.ts';
@@ -283,8 +283,7 @@
     </main>
   </div>
   {#if ui.createIssue.open}<CreateIssueDialog />{/if}
-  {#if ui.createProject && isSignedIn(me.data) && me.data.role === 'admin'}<CreateProjectDialog
-    />{/if}
+  {#if ui.createProject && isAdmin(me.data)}<CreateProjectDialog />{/if}
   <CommandMenu {currentProject} />
   <ShortcutsDialog />
   <ConfirmDialog />

@@ -1,3 +1,4 @@
+export * from './access.ts';
 export * from './actors.ts';
 export * from './attachments.ts';
 export * from './common.ts';
