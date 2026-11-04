@@ -8,7 +8,7 @@
   import { bulkUpdate, cachedIssues, deleteIssues, projectKeyOf, toggleLabel } from '../issues.ts';
   import { navigate, shareUrl, signInPath } from '../nav.ts';
   import { useProjectData } from '../project-data.svelte.ts';
-  import { canWrite, fetchers, isSignedIn, keys } from '../queries.ts';
+  import { canWrite, fetchers, isAdmin as isAdminMe, isSignedIn, keys } from '../queries.ts';
   import { signOut } from '../session.ts';
   import { clearSelection } from '../selection.svelte.ts';
   import { applyTheme } from '../theme.ts';
@@ -31,7 +31,7 @@
   const targets = $derived(cachedIssues(qc, ui.command.targets));
   const targetProject = $derived(targets[0] ? projectKeyOf(targets[0].key) : currentProject);
   const project = useProjectData(() => targetProject);
-  const isAdmin = $derived(isSignedIn(me.data) && me.data.role === 'admin');
+  const isAdmin = $derived(isAdminMe(me.data));
   /** New issues go to the current project, so creating needs write access there. */
   const canCreateIssue = $derived(
     canWrite(projects.data?.find((p) => p.key === currentProject)?.myAccess),

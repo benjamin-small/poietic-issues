@@ -1,23 +1,13 @@
-import { type Principal, definePolicy } from '@poietic-tech/access';
+import type { Principal } from '@poietic-tech/access';
 import { type Database, type Kysely, type RawBuilder, sql } from '@poietic-tech/issues-db';
+import { type AccessLevel, issuesPolicy } from '@poietic-tech/issues-schema';
 import type { Actor, ServiceContext } from './context.ts';
 import { DomainError, forbidden, notFound } from './errors.ts';
 
+export { type AccessLevel, issuesPolicy };
+
 type Exec = Kysely<Database>;
 
-/**
- * The tracker's access policy (ADR 0021, decided by `@poietic-tech/access`): ordered levels, the level each
- * project role gives, and the bypass for admins and the system actor.
- */
-export const issuesPolicy = definePolicy({
-  levels: ['none', 'read', 'write', 'manage'],
-  roles: { viewer: 'read', editor: 'write', manager: 'manage' },
-  adminRole: 'admin',
-  unrestrictedKinds: ['system'],
-});
-
-/** Access an actor has to one project (ADR 0021). Ordered: each level includes the ones before it. */
-export type AccessLevel = (typeof issuesPolicy.levels)[number];
 type Role = keyof typeof issuesPolicy.roles;
 /** Roles that grant at least `write` (the public floor is only `read`). */
 const WRITE_ROLES = (Object.keys(issuesPolicy.roles) as Role[]).filter((r) =>
@@ -38,9 +28,12 @@ export function atLeast(have: AccessLevel, need: AccessLevel): boolean {
   return issuesPolicy.atLeast(have, need);
 }
 
-/** Admins and the system actor: every project at `manage`. */
+/**
+ * Admins and the system actor: every project at `manage`. Asks the policy (its admin role and unrestricted kinds),
+ * so callers can skip the membership queries.
+ */
 export function unrestricted(ctx: ServiceContext): boolean {
-  return ctx.actor.role === 'admin' || ctx.actor.kind === 'system';
+  return issuesPolicy.resolve(principalOf(ctx.actor), { grants: [] }) === issuesPolicy.top;
 }
 
 type Visibility = 'public' | 'private';

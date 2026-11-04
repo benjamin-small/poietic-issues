@@ -4,7 +4,7 @@
   import { createQuery } from '@tanstack/svelte-query';
   import FolderPlus from '@lucide/svelte/icons/folder-plus';
   import LogIn from '@lucide/svelte/icons/log-in';
-  import { fetchers, isSignedIn, keys } from '$lib/queries.ts';
+  import { fetchers, isAdmin, isSignedIn, keys } from '$lib/queries.ts';
   import { ui } from '$lib/ui.svelte.ts';
 
   const me = createQuery(() => ({ queryKey: keys.me, queryFn: fetchers.me, staleTime: 300_000 }));
@@ -40,7 +40,7 @@
     <p class="mb-5 text-sm text-fg-muted">
       Projects hold issues, a workflow and a board. Most teams start with one per product or team.
     </p>
-    {#if isSignedIn(me.data) && me.data.role === 'admin'}
+    {#if isAdmin(me.data)}
       <button class={btn.primary} onclick={() => (ui.createProject = true)}>New project</button>
     {:else}
       <p class="text-sm text-fg-subtle">

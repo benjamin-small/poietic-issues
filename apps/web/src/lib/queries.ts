@@ -1,5 +1,10 @@
 import type { Schemas } from '@poietic-tech/issues-client';
-import type { IssueFilter, SortSpec } from '@poietic-tech/issues-schema';
+import {
+  type IssueFilter,
+  isAdminRole,
+  issuesPolicy,
+  type SortSpec,
+} from '@poietic-tech/issues-schema';
 import { api, call, type Issue, type Project } from './api.ts';
 
 /** `GET /me`: the signed-in user, or `{ anonymous: true }` for a signed-out visitor. */
@@ -9,10 +14,17 @@ export function isSignedIn(me: Me | undefined): me is Schemas['User'] {
   return !!me && !('anonymous' in me);
 }
 
+/** A signed-in global admin, by the access policy's admin role (UI only: the server enforces it). */
+export function isAdmin(me: Me | undefined): boolean {
+  return isSignedIn(me) && isAdminRole(me.role);
+}
+
 /** The caller's level on a project (`myAccess`); anything below `write` is read-only (ADR 0021). */
 export type Access = Project['myAccess'];
-export const canWrite = (access: Access | undefined) => access === 'write' || access === 'manage';
-export const canManage = (access: Access | undefined) => access === 'manage';
+export const canWrite = (access: Access | undefined) =>
+  access !== undefined && issuesPolicy.atLeast(access, 'write');
+export const canManage = (access: Access | undefined) =>
+  access !== undefined && issuesPolicy.atLeast(access, 'manage');
 
 /** Query keys. Issues are cached by key (`ENG-42`), lists by project + query. */
 export const keys = {
