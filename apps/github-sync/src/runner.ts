@@ -38,6 +38,8 @@ export interface RunnerOptions {
   terminals?: string[];
   discoveryMs: number;
   trackerPollMs: number;
+  /** The longest wait between idle tracker polls; each empty poll doubles the wait up to it. Defaults to `trackerPollMs`. */
+  trackerIdleMaxMs?: number;
   /** The wait before following a terminal again after its stream stopped. */
   restartMs?: number;
   signal: AbortSignal;
@@ -164,7 +166,9 @@ export class Runner {
 
   async #trackerLoop(): Promise<void> {
     const { tracker, store, sync, log, signal, trackerPollMs } = this.#o;
+    const idleMaxMs = Math.max(this.#o.trackerIdleMaxMs ?? trackerPollMs, trackerPollMs);
     let failures = 0;
+    let delay = trackerPollMs;
     while (!signal.aborted) {
       try {
         let cursor = store.cursor(TRACKER_CURSOR);
@@ -191,7 +195,11 @@ export class Runner {
         }
         failures = 0;
         this.heartbeat.tracker = Date.now();
-        if (page.data.length < 100 && !(await sleep(trackerPollMs, signal))) return;
+        if (page.data.length >= 100) continue;
+        // Back off while the log is quiet; any new event brings the wait back to `trackerPollMs`.
+        if (page.data.length > 0) delay = trackerPollMs;
+        if (!(await sleep(delay, signal))) return;
+        if (page.data.length === 0) delay = Math.min(delay * 2, idleMaxMs);
       } catch (error) {
         if (signal.aborted) return;
         failures += 1;

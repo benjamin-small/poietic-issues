@@ -10,6 +10,7 @@ export interface Config {
   terminals: string[] | undefined;
   excludeRepos: string[];
   trackerPollMs: number;
+  trackerIdleMaxMs: number;
   discoveryMs: number;
   healthPort: number;
 }
@@ -52,6 +53,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
         ? ['poietic-tech/persistent-agents']
         : list(env.SYNC_EXCLUDE_REPOS),
     trackerPollMs: number(env, 'SYNC_TRACKER_POLL_MS', 5000),
+    trackerIdleMaxMs: number(env, 'SYNC_TRACKER_IDLE_MAX_MS', 30_000),
     discoveryMs: number(env, 'SYNC_DISCOVERY_MS', 300_000),
     healthPort: number(env, 'SYNC_HEALTH_PORT', 8080),
   };

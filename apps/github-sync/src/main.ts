@@ -49,11 +49,12 @@ async function main(): Promise<void> {
     terminals: config.terminals,
     discoveryMs: config.discoveryMs,
     trackerPollMs: config.trackerPollMs,
+    trackerIdleMaxMs: config.trackerIdleMaxMs,
     signal: controller.signal,
   });
 
   // Live while the tracker loop keeps turning; the loop retries its own failures, so only a hang trips this.
-  const staleMs = Math.max(config.trackerPollMs * 4, 5 * 60_000);
+  const staleMs = Math.max(config.trackerPollMs * 4, config.trackerIdleMaxMs * 4, 5 * 60_000);
   const health = createServer((req, res) => {
     const fresh = Date.now() - runner.heartbeat.tracker < staleMs;
     const ok =
