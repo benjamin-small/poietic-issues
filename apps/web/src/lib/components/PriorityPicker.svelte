@@ -2,7 +2,7 @@
   import { useQueryClient } from '@tanstack/svelte-query';
   import type { Issue } from '../api.ts';
   import { PRIORITY_LABELS, PRIORITY_ORDER } from '../format.ts';
-  import { updateIssue } from '../issues.ts';
+  import { editIssue } from '../issues.ts';
   import Picker from './Picker.svelte';
   import PriorityIcon from './PriorityIcon.svelte';
 
@@ -20,7 +20,7 @@
 
   function select(value: string) {
     const priority = Number(value);
-    if (priority !== issue.priority) void updateIssue(qc, issue, { priority }, { priority });
+    if (priority !== issue.priority) void editIssue(qc, issue, { priority }, { priority });
   }
 </script>
 

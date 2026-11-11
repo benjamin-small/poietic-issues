@@ -4,7 +4,7 @@
   import { useQueryClient } from '@tanstack/svelte-query';
   import type { Issue, Project } from '../api.ts';
   import { repoUrl } from '../format.ts';
-  import { updateIssue } from '../issues.ts';
+  import { editIssue } from '../issues.ts';
   import Picker from './Picker.svelte';
 
   /** Picks which of the project's linked GitHub repositories an issue belongs to. Read-only, it is a plain link. */
@@ -24,7 +24,7 @@
   function select(value: string) {
     const repo = value === NONE ? null : value;
     if (repo === issue.repo) return;
-    void updateIssue(qc, issue, { repo }, { repo });
+    void editIssue(qc, issue, { repo }, { repo });
   }
 </script>
 

@@ -206,6 +206,27 @@ test('deletes to the trash and restores', async ({ page }) => {
   await expect(row(page, key)).toBeVisible();
 });
 
+test('a value set and cleared again in quick succession records no change (PIB-1)', async ({
+  page,
+}) => {
+  const key = await apiCreateIssue(page.request, { title: 'Quick edits' });
+  await page.goto(`/i/${key}`);
+  const detail = page.getByTestId('issue-detail');
+  const estimate = detail.getByLabel('Estimate');
+  await estimate.fill('3');
+  await estimate.press('Tab');
+  await estimate.fill('');
+  await estimate.press('Tab');
+  // A later real change, so the activity has something to show once both have settled.
+  await detail.getByTestId('priority-picker').click();
+  await page.getByRole('option', { name: 'Urgent' }).click();
+  await expect(detail.getByTestId('activity')).toContainText('Urgent');
+  await page.reload();
+  await expect(detail.getByTestId('activity')).toContainText('Urgent');
+  await expect(detail.getByTestId('activity')).not.toContainText('estimate');
+  await expect(estimate).toHaveValue('');
+});
+
 test('shows the reason given for a change', async ({ page }) => {
   await openList(page);
   const key = await apiCreateIssue(page.request, { title: 'Needs a reason' });

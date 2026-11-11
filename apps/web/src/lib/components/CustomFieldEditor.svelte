@@ -2,7 +2,7 @@
   import { useQueryClient } from '@tanstack/svelte-query';
   import type { CustomField, Issue, User } from '../api.ts';
   import { findPerson, unknownUserLabel } from '../format.ts';
-  import { updateIssue } from '../issues.ts';
+  import { editIssue } from '../issues.ts';
   import Avatar from './Avatar.svelte';
   import DateInput from './DateInput.svelte';
   import Picker from './Picker.svelte';
@@ -20,7 +20,7 @@
     const customFields = { ...issue.customFields };
     if (next === null || (Array.isArray(next) && next.length === 0)) delete customFields[field.key];
     else customFields[field.key] = next;
-    void updateIssue(qc, issue, { customFields: { [field.key]: next } }, { customFields });
+    void editIssue(qc, issue, { customFields: { [field.key]: next } }, { customFields });
   }
 
   const setLabel = $derived(`Set ${field.name.toLowerCase()}`);

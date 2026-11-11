@@ -7,6 +7,7 @@ import {
   type Issue,
   type UpdateIssueInput,
 } from './api.ts';
+import { createEditQueue } from './issue-edits.ts';
 import { keys } from './queries.ts';
 import { toast } from './toast.svelte.ts';
 
@@ -72,6 +73,42 @@ export async function updateIssue(
     toast(`Couldn't update ${issue.key}: ${errorMessage(error)}`, 'error');
     return undefined;
   }
+}
+
+const edits = createEditQueue({
+  async send(base, patch) {
+    try {
+      const updated = await call(
+        api.PATCH('/issues/{issue}', { params: { path: { issue: base.key } }, body: patch }),
+      );
+      upsertIssue(qc(), updated);
+      afterChange(qc(), updated);
+      return updated;
+    } catch (error) {
+      upsertIssue(qc(), base);
+      toast(`Couldn't update ${base.key}: ${errorMessage(error)}`, 'error');
+      return undefined;
+    }
+  },
+});
+let editClient: QueryClient | undefined;
+const qc = () => editClient!;
+if (typeof window !== 'undefined') window.addEventListener('pagehide', () => edits.flushAll());
+
+/**
+ * An inline edit to one issue (a picker or a property field). It shows at once, and edits made within
+ * `EDIT_DELAY_MS` of each other are saved as one PATCH, without the fields that ended back where they started
+ * (PIB-1). On failure the issue is put back as it was before the first of those edits.
+ */
+export function editIssue(
+  client: QueryClient,
+  issue: Issue,
+  patch: UpdateIssueInput,
+  optimistic?: Partial<Issue>,
+): Promise<Issue | undefined> {
+  editClient = client;
+  if (optimistic) upsertIssue(client, { ...issue, ...optimistic });
+  return edits.push(issue, patch);
 }
 
 export interface MovePlacement {
