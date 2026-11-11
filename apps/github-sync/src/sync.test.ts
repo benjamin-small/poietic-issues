@@ -142,6 +142,47 @@ describe(`github-sync (${testDialect()})`, () => {
     expect(gh.calls.filter((c) => !c.startsWith('GET'))).toEqual([]);
   });
 
+  it('says why on every tracker write it makes', async () => {
+    const start = cursor;
+    const repo = 'poietic-tech/reasons';
+    gh.addRepo(repo);
+    const { number } = gh.open(repo, { title: 'Why', labels: ['bug'] });
+    await sync.onGitHub('github.issues.opened', gh.issuePayload('opened', repo, number));
+    Object.assign(gh.issue(repo, number), { title: 'Why, edited' });
+    await sync.onGitHub('github.issues.edited', gh.issuePayload('edited', repo, number));
+    const comment = gh.comment(repo, number, 'A comment');
+    await sync.onGitHub(
+      'github.issue_comment.created',
+      gh.commentPayload('created', repo, number, comment),
+    );
+    const payload = gh.issuePayload('deleted', repo, number);
+    gh.repos.get(repo)!.issues.delete(number);
+    await sync.onGitHub('github.issues.deleted', payload);
+
+    const mine = (await agentTracker.events(start, TRACKER_EVENT_TYPES, 1000)).data.filter(
+      (e) => e.actorId === selfId,
+    );
+    expect(mine.map((e) => e.type)).toEqual(
+      expect.arrayContaining([
+        'project.repo_added',
+        'label.created',
+        'issue.created',
+        'issue.updated',
+        'comment.created',
+        'issue.deleted',
+      ]),
+    );
+    for (const e of mine) expect((e.data as { reason?: string }).reason).toBeTruthy();
+    const reasonOf = (type: string) =>
+      (mine.find((e) => e.type === type)!.data as { reason?: string }).reason;
+    expect(reasonOf('issue.updated')).toBe(`synced from GitHub issue ${repo}#${number}`);
+    expect(reasonOf('comment.created')).toBe(
+      `synced from a comment on GitHub issue ${repo}#${number}`,
+    );
+    expect(reasonOf('issue.deleted')).toBe(`GitHub issue ${repo}#${number} was deleted`);
+    await drainTracker();
+  });
+
   it('applies GitHub edits, closes and reopens to the tracker issue', async () => {
     const { number } = gh.open(REPO, { title: 'Old title' });
     await issueEvent('opened', number);
@@ -175,13 +216,17 @@ describe(`github-sync (${testDialect()})`, () => {
     await issueEvent('opened', number);
     const issue = await trackerIssueFor(number);
     const done = await human.statusIn(issue.projectId, ['completed']);
-    await human.ensureLabels(issue.projectId, ['triaged']);
-    await human.updateIssue(issue.id, {
-      title: 'Edited in the tracker',
-      description: 'Tracker body',
-      status: done.id,
-      labels: ['triaged'],
-    });
+    await human.ensureLabels(issue.projectId, ['triaged'], {}, 'test');
+    await human.updateIssue(
+      issue.id,
+      {
+        title: 'Edited in the tracker',
+        description: 'Tracker body',
+        status: done.id,
+        labels: ['triaged'],
+      },
+      'edited by a person',
+    );
     await drainTracker();
 
     const remote = gh.issue(REPO, number);
@@ -208,6 +253,7 @@ describe(`github-sync (${testDialect()})`, () => {
       project.id,
       { title: 'Filed in the tracker', description: 'Hi' },
       'k1',
+      'filed by a person',
     );
     await drainTracker();
 
@@ -228,7 +274,12 @@ describe(`github-sync (${testDialect()})`, () => {
     const seed = gh.open(REPO, { title: 'Seed' });
     await issueEvent('opened', seed.number);
     const project = (await human.projectForRepo(REPO))!;
-    const created = await human.createIssue(project.id, { title: 'Crash before link' }, 'k2');
+    const created = await human.createIssue(
+      project.id,
+      { title: 'Crash before link' },
+      'k2',
+      'test',
+    );
     await drainTracker();
     const number = store.issueByTracker(created.id)!.number;
     expect(gh.issue(REPO, number).title).toBe('Crash before link');
@@ -278,7 +329,7 @@ describe(`github-sync (${testDialect()})`, () => {
     expect(gh.issue(REPO, number).comments).toHaveLength(1);
 
     // tracker → GitHub
-    const mine = await human.createComment(issue.id, 'From the tracker', 'c1');
+    const mine = await human.createComment(issue.id, 'From the tracker', 'c1', 'test');
     await drainTracker();
     const mirrored = gh.issue(REPO, number).comments[1]!;
     expect(mirrored.body).toContain('From the tracker');
@@ -293,11 +344,11 @@ describe(`github-sync (${testDialect()})`, () => {
     ).data!.data;
     expect(comments).toHaveLength(2);
 
-    await human.updateComment(mine.id, 'From the tracker, edited');
+    await human.updateComment(mine.id, 'From the tracker, edited', 'test');
     await drainTracker();
     expect(gh.issue(REPO, number).comments[1]!.body).toContain('From the tracker, edited');
 
-    await human.deleteComment(mine.id);
+    await human.deleteComment(mine.id, 'test');
     await drainTracker();
     expect(gh.issue(REPO, number).comments).toHaveLength(1);
 
@@ -325,7 +376,7 @@ describe(`github-sync (${testDialect()})`, () => {
     const two = gh.open(REPO, { title: 'Trash in the tracker' }).number;
     await issueEvent('opened', two);
     const second = store.issueByGitHub(REPO, two)!;
-    await human.trashIssue(second.trackerId);
+    await human.trashIssue(second.trackerId, 'test');
     await drainTracker();
     expect(gh.issue(REPO, two)).toMatchObject({ state: 'closed', state_reason: 'not_planned' });
   });
@@ -373,7 +424,7 @@ describe(`github-sync (${testDialect()})`, () => {
 
   it('keeps tracker issues of projects without a repository to itself', async () => {
     const project = await createProject(t.ctx, { key: 'SOLO', name: 'Solo' });
-    await human.createIssue(project.id, { title: 'Tracker only' }, 'k3');
+    await human.createIssue(project.id, { title: 'Tracker only' }, 'k3', 'test');
     await drainTracker();
     expect(gh.calls.filter((c) => c.startsWith('POST'))).toEqual([]);
   });
