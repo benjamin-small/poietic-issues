@@ -30,10 +30,16 @@ Every later deployment is step 3 again. To rotate a token, update it in Infisica
 ssh papa sudo k3s kubectl -n poietic-issues-sync logs statefulset/github-sync -f
 ssh papa sudo k3s kubectl -n poietic-issues-sync get pods,pvc
 poietic-tech bridge terminal show github-poietic-tech     # the issues-sync subscription's position and lag
+poietic-tech bridge terminal show poietic-issues          # the github-sync notice subscription
 ```
 
 - **A skipped event** (`*.event_skipped` in the logs) failed for a reason a retry would not fix. Fix the cause,
   then make any edit on either side: the next event carries the whole current state.
+- **Tracker → GitHub is woken by notices** on `poietic-issues` (see the [sync's README](../../apps/github-sync/README.md)).
+  Idle, it makes no tracker requests; `tracker.reconcile` in the logs marks the reads at start, after a notice
+  outage of more than a minute, and every 6 hours. Not ready (`/readyz` 503) means the notice listener stopped
+  (`bridge.stopped` for `poietic-issues`, for example `not_allowed` when the agent is not a reader) or the last
+  tracker read failed (`tracker.retry`).
 - **Lost volume:** the sync rebuilds its links from `poietic.github.url` on tracker issues when it starts with an
   empty store, and its tracker cursor starts at the newest event.
 - **Replay from the bridge:** `poietic-tech bridge subscription reset <terminal> issues-sync --to <seq>` with the

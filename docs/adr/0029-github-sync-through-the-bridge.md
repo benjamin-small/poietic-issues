@@ -1,6 +1,6 @@
 # 0029. GitHub issues sync both ways, through Poietic Bridge
 
-- **Status:** Accepted
+- **Status:** Accepted (tracker side amended 2026-11-10: woken by notices, no poll)
 - **Date:** 2026-10-31
 
 ## Context
@@ -20,8 +20,16 @@ which records `poietic.github.url` on the issues it creates.
 - **GitHub → tracker** reads `github.issues.*` and `github.issue_comment.*` from every `github` terminal it can see,
   through one subscription per terminal (`issues-sync`). Each event is handled against the issue as GitHub has it
   now (a REST read), so late or out-of-order deliveries never roll anything back.
-- **Tracker → GitHub** polls `GET /events` from a saved cursor and writes through the GitHub REST API with a
-  fine-grained token. Events the sync caused itself (its own actor id) are skipped.
+- **Tracker → GitHub** reads `GET /events` from a saved cursor and writes through the GitHub REST API with a
+  fine-grained token. Events the sync caused itself (its own actor id, `isOwnWrite`) are skipped.
+  - _Amended 2026-11-10 ([ADR 0032](0032-notice-webhooks-and-change-reasons.md), PIB-3)._ It no longer polls every
+    5 seconds. A second bridge listener, on the `poietic-issues` terminal with its own subscription (`github-sync`,
+    types `issues.issue` and `issues.comment`), acknowledges each notice on receipt and wakes the shared `follow()`
+    from `@poietic-tech/issues-client`; the tracker cursor stays the record of progress. Reconciliation reads the
+    tracker at start, once the notice connection is back after more than 60 seconds down, and every 6 hours. Idle,
+    the sync makes no tracker requests. Ready means the listener is connected (or reconnecting within its backoff)
+    and the last read did not fail; live means no read has hung for 5 minutes. Every tracker write sends
+    `X-Change-Reason` (`synced from GitHub issue owner/repo#12`).
 - **Repositories map to projects** through `project.repos`; one project may hold several. A repository with no
   project gets a new one named after it in title case, with the repository's visibility (`poietic-bridge` →
   "Poietic Bridge", key `PB`, private); a project holding only that repository follows later visibility changes

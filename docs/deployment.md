@@ -208,7 +208,7 @@ The pipeline agents are woken by Poietic Bridge instead of polling ([ADR 0032](a
 
    Then change an issue and check that an `issues.issue.updated` event follows. `poietic-tech issues webhook deliveries <whk_id>` shows what the bridge answered.
 
-4. **Deploy the listeners** (persistent-agents). Each subscribes to the terminal with its own identity.
+4. **Deploy the listeners** (persistent-agents, and the GitHub sync: [deploy/k3s](../deploy/k3s/README.md)). Each subscribes to the terminal with its own identity and subscription (the sync's is `github-sync`).
 
 **Rolling back.** Delete the webhook first (`poietic-tech issues webhook rm <whk_id>`), then the terminal. Listeners fall back to their reconciliation schedule. To keep the terminal but stop notices, disable the webhook instead (`webhook edit <whk_id> --disable`).
 

@@ -72,6 +72,8 @@ spec:
             limits:
               cpu: 500m
               memory: 256Mi
+          # Ready: the tracker-notice listener (bridge terminal poietic-issues) is connected or reconnecting, and the
+          # last tracker read did not fail. Live: no tracker read has hung. There is no tracker poll to be fresh about.
           startupProbe:
             httpGet:
               path: /readyz
