@@ -3,7 +3,7 @@
   import { useQueryClient } from '@tanstack/svelte-query';
   import type { Issue } from '../api.ts';
   import { relativeTime } from '../format.ts';
-  import { updateIssue } from '../issues.ts';
+  import { editIssue } from '../issues.ts';
   import type { ProjectData } from '../project-data.svelte.ts';
   import AssigneePicker from './AssigneePicker.svelte';
   import Avatar from './Avatar.svelte';
@@ -23,11 +23,11 @@
     const raw = (event.target as HTMLInputElement).value.trim();
     const estimate = raw === '' ? null : Number(raw);
     if (estimate !== null && Number.isNaN(estimate)) return;
-    if (estimate !== issue.estimate) void updateIssue(qc, issue, { estimate }, { estimate });
+    if (estimate !== issue.estimate) void editIssue(qc, issue, { estimate }, { estimate });
   }
 
   function setDue(dueDate: string | null) {
-    if (dueDate !== issue.dueDate) void updateIssue(qc, issue, { dueDate }, { dueDate });
+    if (dueDate !== issue.dueDate) void editIssue(qc, issue, { dueDate }, { dueDate });
   }
 </script>
 

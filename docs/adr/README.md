@@ -37,3 +37,4 @@ Short records of decisions that constrain future work. Copy `0000-template.md`, 
 | [0031](0031-global-identity-local-access.md)             | Identity is global; access is layered                                  | Accepted (steps 3–4 to do)                |
 | [0032](0032-notice-webhooks-and-change-reasons.md)       | Notice webhooks, change reasons and a published event follower         | Accepted                                  |
 | [0033](0033-access-decisions-via-poietic-tech-access.md) | Access decisions via `@poietic-tech/access`                            | Accepted                                  |
+| [0034](0034-coalesced-inline-edits.md)                   | Inline issue edits are coalesced                                       | Accepted                                  |

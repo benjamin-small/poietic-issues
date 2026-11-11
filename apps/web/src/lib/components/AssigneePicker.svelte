@@ -2,7 +2,7 @@
   import { formatActor } from '@poietic-tech/issues-schema';
   import { useQueryClient } from '@tanstack/svelte-query';
   import type { Issue, User } from '../api.ts';
-  import { updateIssue } from '../issues.ts';
+  import { editIssue } from '../issues.ts';
   import Avatar from './Avatar.svelte';
   import Picker from './Picker.svelte';
 
@@ -24,7 +24,7 @@
   function select(value: string) {
     const user = users.find((u) => u.id === value) ?? null;
     if ((user?.id ?? null) === issue.assigneeId) return;
-    void updateIssue(
+    void editIssue(
       qc,
       issue,
       { assignee: user?.id ?? null },

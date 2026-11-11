@@ -1,7 +1,7 @@
 <script lang="ts">
   import { useQueryClient } from '@tanstack/svelte-query';
   import type { Issue, Status } from '../api.ts';
-  import { updateIssue } from '../issues.ts';
+  import { editIssue } from '../issues.ts';
   import Picker from './Picker.svelte';
   import StatusIcon from './StatusIcon.svelte';
 
@@ -17,7 +17,7 @@
   function select(id: string) {
     const s = statuses.find((x) => x.id === id);
     if (!s || s.id === issue.statusId) return;
-    void updateIssue(
+    void editIssue(
       qc,
       issue,
       { status: s.id },

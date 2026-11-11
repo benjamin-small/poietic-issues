@@ -2,7 +2,7 @@
   import { useQueryClient } from '@tanstack/svelte-query';
   import Tag from '@lucide/svelte/icons/tag';
   import type { Issue, Label } from '../api.ts';
-  import { updateIssue } from '../issues.ts';
+  import { editIssue } from '../issues.ts';
   import LabelChip from './LabelChip.svelte';
   import Picker from './Picker.svelte';
 
@@ -21,7 +21,7 @@
       .filter((l) => next.includes(l.id))
       .map((l) => ({ id: l.id, name: l.name, color: l.color }))
       .sort((a, b) => a.name.localeCompare(b.name));
-    void updateIssue(qc, issue, has ? { removeLabels: [id] } : { addLabels: [id] }, {
+    void editIssue(qc, issue, has ? { removeLabels: [id] } : { addLabels: [id] }, {
       labelIds: next,
       labels: summaries,
     });
