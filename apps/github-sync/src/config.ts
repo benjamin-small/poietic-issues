@@ -7,9 +7,11 @@ export interface Config {
   githubApiUrl: string;
   stateFile: string;
   subscription: string;
+  /** The bridge terminal tracker notices arrive on, and the sync's subscription there. */
+  noticeTerminal: string;
+  noticeSubscription: string;
   terminals: string[] | undefined;
   excludeRepos: string[];
-  trackerPollMs: number;
   discoveryMs: number;
   healthPort: number;
 }
@@ -45,13 +47,14 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     githubApiUrl: env.GITHUB_API_URL || 'https://api.github.com',
     stateFile: env.SYNC_STATE_FILE || '/data/sync.db',
     subscription: env.SYNC_SUBSCRIPTION || 'issues-sync',
+    noticeTerminal: env.SYNC_NOTICE_TERMINAL || 'poietic-issues',
+    noticeSubscription: env.SYNC_NOTICE_SUBSCRIPTION || 'github-sync',
     terminals: terminals.length > 0 ? terminals : undefined,
     // persistent-agents' own GitHub intake owns that repository.
     excludeRepos:
       env.SYNC_EXCLUDE_REPOS === undefined
         ? ['poietic-tech/persistent-agents']
         : list(env.SYNC_EXCLUDE_REPOS),
-    trackerPollMs: number(env, 'SYNC_TRACKER_POLL_MS', 5000),
     discoveryMs: number(env, 'SYNC_DISCOVERY_MS', 300_000),
     healthPort: number(env, 'SYNC_HEALTH_PORT', 8080),
   };

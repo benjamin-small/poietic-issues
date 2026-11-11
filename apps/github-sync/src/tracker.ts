@@ -1,4 +1,10 @@
-import { type ApiClient, type Schemas, unwrap } from '@poietic-tech/issues-client';
+import {
+  type ApiClient,
+  REASON_MAX,
+  reasonHeaders,
+  type Schemas,
+  unwrap,
+} from '@poietic-tech/issues-client';
 import { projectKeyFor, projectNameFor, sortedLabels } from './mapping.ts';
 
 export type Issue = Schemas['Issue'];
@@ -25,10 +31,20 @@ export const visibilityOf = (repo: Pick<RepoInfo, 'private'>): Visibility =>
 
 const idem = (key: string) => ({ 'idempotency-key': key });
 
+/** The `X-Change-Reason` header for a write: one line, cut to the tracker's limit. */
+export function why(reason: string): Record<string, string> {
+  const line = reason.replace(/[\p{Cc}\p{Zl}\p{Zp}]+/gu, ' ').trim();
+  const chars = [...line];
+  return reasonHeaders(
+    chars.length > REASON_MAX ? `${chars.slice(0, REASON_MAX - 1).join('')}…` : line,
+  );
+}
+
 /**
  * The tracker as the sync uses it: the public API, with projects indexed by linked repository and each
  * project's statuses and labels cached. Creates carry deterministic idempotency keys, so a retried create
- * (within the server's 24-hour window) returns the first result instead of a duplicate.
+ * (within the server's 24-hour window) returns the first result instead of a duplicate. Every write says why
+ * (`X-Change-Reason`), so the tracker's activity shows what on GitHub caused it.
  */
 export class Tracker {
   readonly api: ApiClient;
@@ -94,13 +110,17 @@ export class Tracker {
           description: repo.description ?? '',
           visibility: visibilityOf(repo),
         },
-        headers: idem(`github-sync:project:${repo.full_name.toLowerCase()}`),
+        headers: {
+          ...idem(`github-sync:project:${repo.full_name.toLowerCase()}`),
+          ...why(`created for GitHub repository ${repo.full_name}`),
+        },
       }),
     );
     unwrap(
       await this.api.POST('/projects/{project}/repos', {
         params: { path: { project: created.id } },
         body: { repo: repo.full_name },
+        headers: why(`linked to GitHub repository ${repo.full_name}`),
       }),
     );
     this.invalidate();
@@ -110,11 +130,12 @@ export class Tracker {
     return linked;
   }
 
-  async setVisibility(projectId: string, visibility: Visibility): Promise<void> {
+  async setVisibility(projectId: string, visibility: Visibility, reason: string): Promise<void> {
     unwrap(
       await this.api.PATCH('/projects/{project}', {
         params: { path: { project: projectId } },
         body: { visibility },
+        headers: why(reason),
       }),
     );
     this.invalidate();
@@ -147,7 +168,8 @@ export class Tracker {
   async ensureLabels(
     projectId: string,
     names: string[],
-    colors: Record<string, string> = {},
+    colors: Record<string, string>,
+    reason: string,
   ): Promise<string[]> {
     let byName = this.#labels.get(projectId);
     if (!byName) {
@@ -168,7 +190,10 @@ export class Tracker {
           await this.api.POST('/projects/{project}/labels', {
             params: { path: { project: projectId } },
             body: { name, ...(color && /^[0-9a-f]{6}$/i.test(color) && { color: `#${color}` }) },
-            headers: idem(`github-sync:label:${projectId}:${name.toLowerCase()}`),
+            headers: {
+              ...idem(`github-sync:label:${projectId}:${name.toLowerCase()}`),
+              ...why(reason),
+            },
           }),
         );
         actual = created.name;
@@ -187,24 +212,34 @@ export class Tracker {
     projectId: string,
     body: Schemas['CreateIssueInput'],
     idempotencyKey: string,
+    reason: string,
   ): Promise<Issue> {
     return unwrap(
       await this.api.POST('/projects/{project}/issues', {
         params: { path: { project: projectId } },
         body,
-        headers: idem(idempotencyKey),
+        headers: { ...idem(idempotencyKey), ...why(reason) },
       }),
     );
   }
 
-  async updateIssue(id: string, body: Schemas['UpdateIssueInput']): Promise<Issue> {
+  async updateIssue(id: string, body: Schemas['UpdateIssueInput'], reason: string): Promise<Issue> {
     return unwrap(
-      await this.api.PATCH('/issues/{issue}', { params: { path: { issue: id } }, body }),
+      await this.api.PATCH('/issues/{issue}', {
+        params: { path: { issue: id } },
+        body,
+        headers: why(reason),
+      }),
     );
   }
 
-  async trashIssue(id: string): Promise<void> {
-    unwrap(await this.api.DELETE('/issues/{issue}', { params: { path: { issue: id } } }));
+  async trashIssue(id: string, reason: string): Promise<void> {
+    unwrap(
+      await this.api.DELETE('/issues/{issue}', {
+        params: { path: { issue: id } },
+        headers: why(reason),
+      }),
+    );
   }
 
   /** Every issue of a project, trashed ones included. */
@@ -224,24 +259,35 @@ export class Tracker {
     } while (cursor);
   }
 
-  async createComment(issueId: string, body: string, idempotencyKey: string): Promise<Comment> {
+  async createComment(
+    issueId: string,
+    body: string,
+    idempotencyKey: string,
+    reason: string,
+  ): Promise<Comment> {
     return unwrap(
       await this.api.POST('/issues/{issue}/comments', {
         params: { path: { issue: issueId } },
         body: { body },
-        headers: idem(idempotencyKey),
+        headers: { ...idem(idempotencyKey), ...why(reason) },
       }),
     );
   }
 
-  async updateComment(id: string, body: string): Promise<Comment> {
+  async updateComment(id: string, body: string, reason: string): Promise<Comment> {
     return unwrap(
-      await this.api.PATCH('/comments/{id}', { params: { path: { id } }, body: { body } }),
+      await this.api.PATCH('/comments/{id}', {
+        params: { path: { id } },
+        body: { body },
+        headers: why(reason),
+      }),
     );
   }
 
-  async deleteComment(id: string): Promise<void> {
-    unwrap(await this.api.DELETE('/comments/{id}', { params: { path: { id } } }));
+  async deleteComment(id: string, reason: string): Promise<void> {
+    unwrap(
+      await this.api.DELETE('/comments/{id}', { params: { path: { id } }, headers: why(reason) }),
+    );
   }
 
   async events(

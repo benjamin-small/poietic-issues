@@ -1,11 +1,11 @@
 import { createServer } from 'node:http';
 import { agentFromEnv } from '@poietic-tech/auth';
-import { Bridge } from '@poietic-tech/bridge';
+import { Bridge, defaultConnect } from '@poietic-tech/bridge';
 import { createClient } from '@poietic-tech/issues-client';
 import { loadConfig } from './config.ts';
 import { GitHub } from './github.ts';
 import { describeError, jsonLogger } from './log.ts';
-import { Runner } from './runner.ts';
+import { onReady, Runner } from './runner.ts';
 import { Store } from './store.ts';
 import { Sync } from './sync.ts';
 import { Tracker } from './tracker.ts';
@@ -39,7 +39,13 @@ async function main(): Promise<void> {
     log,
   });
   const controller = new AbortController();
-  const runner = new Runner({
+  // Its own client, so only the notice listener's `ready` frames count as the notice connection being up.
+  const noticeBridge = new Bridge({
+    caller: agent,
+    baseUrl: config.bridgeUrl,
+    connect: onReady(defaultConnect, () => runner.noticesConnected()),
+  });
+  const runner: Runner = new Runner({
     bridge: new Bridge({ caller: agent, baseUrl: config.bridgeUrl }),
     tracker,
     store,
@@ -48,20 +54,24 @@ async function main(): Promise<void> {
     subscription: config.subscription,
     terminals: config.terminals,
     discoveryMs: config.discoveryMs,
-    trackerPollMs: config.trackerPollMs,
+    notices: {
+      bridge: noticeBridge,
+      terminal: config.noticeTerminal,
+      subscription: config.noticeSubscription,
+    },
     signal: controller.signal,
   });
 
-  // Live while the tracker loop keeps turning; the loop retries its own failures, so only a hang trips this.
-  const staleMs = Math.max(config.trackerPollMs * 4, 5 * 60_000);
+  // Ready: the notice listener is connected (or reconnecting within its backoff) and the last tracker read did not
+  // fail. Live: no tracker read has hung. With nothing happening there is nothing to be fresh about, so neither
+  // check asks for recent activity.
   const health = createServer((req, res) => {
-    const fresh = Date.now() - runner.heartbeat.tracker < staleMs;
-    const ok =
-      req.url === '/readyz'
-        ? runner.heartbeat.tracker > 0
-        : fresh || runner.heartbeat.tracker === 0;
+    const state = runner.health();
+    const ok = req.url === '/readyz' ? state.ready : state.live;
     res.writeHead(ok ? 200 : 503, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({ ok, terminals: runner.terminals, heartbeat: runner.heartbeat }));
+    res.end(
+      JSON.stringify({ ok, ...state, terminals: runner.terminals, heartbeat: runner.heartbeat }),
+    );
   }).listen(config.healthPort);
 
   const stop = (signal: string) => {

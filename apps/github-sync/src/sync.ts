@@ -1,4 +1,4 @@
-import { ApiError } from '@poietic-tech/issues-client';
+import { ApiError, isOwnWrite } from '@poietic-tech/issues-client';
 import { type GitHub, GitHubError, type IssueChange } from './github.ts';
 import type { Logger } from './log.ts';
 import {
@@ -42,7 +42,7 @@ export interface SyncOptions {
 }
 
 /** The tracker event types the sync follows. */
-export const TRACKER_EVENT_TYPES = [
+export const TRACKER_EVENT_TYPES: TrackerEvent['type'][] = [
   'issue.created',
   'issue.updated',
   'issue.deleted',
@@ -93,6 +93,9 @@ function parseIssueUrl(url: unknown): { repo: string; number: number } | undefin
   const m = /^https:\/\/github\.com\/([^/]+\/[^/]+)\/issues\/(\d+)$/.exec(url);
   return m ? { repo: m[1]!, number: Number(m[2]) } : undefined;
 }
+
+/** `owner/name#12`, the way GitHub writes an issue reference. */
+const ref = (repo: string, number: number) => `${repo}#${number}`;
 
 const labelColors = (issue: GitHubIssue): Record<string, string> =>
   Object.fromEntries(
@@ -165,7 +168,11 @@ export class Sync {
       return;
     }
     if (project.visibility === visibility) return;
-    await tracker.setVisibility(project.id, visibility);
+    await tracker.setVisibility(
+      project.id,
+      visibility,
+      `GitHub repository ${repo.full_name} was made ${visibility}`,
+    );
     log.info('tracker.visibility', { key: project.key, repo: repo.full_name, visibility });
   }
 
@@ -196,7 +203,10 @@ export class Sync {
 
   async #trash(link: IssueLink): Promise<void> {
     try {
-      await this.#o.tracker.trashIssue(link.trackerId);
+      await this.#o.tracker.trashIssue(
+        link.trackerId,
+        `GitHub issue ${ref(link.repo, link.number)} was deleted`,
+      );
       this.#o.log.info('tracker.trashed', {
         key: link.trackerKey,
         repo: link.repo,
@@ -234,7 +244,8 @@ export class Sync {
     const project = await tracker.ensureProjectForRepo(repoInfo);
     const snapshot = snapshotOfGitHub(gh);
     const status = await this.#statusFor(project.id, snapshot.state);
-    const labels = await tracker.ensureLabels(project.id, snapshot.labels, labelColors(gh));
+    const reason = `synced from GitHub issue ${ref(repo, gh.number)}`;
+    const labels = await tracker.ensureLabels(project.id, snapshot.labels, labelColors(gh), reason);
     const issue = await tracker.createIssue(
       project.id,
       {
@@ -246,6 +257,7 @@ export class Sync {
         metadata: { [GITHUB_URL_KEY]: gh.html_url },
       },
       `github-sync:issue:${repo.toLowerCase()}#${gh.number}`,
+      reason,
     );
     const link = this.#newLink(repo, gh, issue, snapshot);
     store.saveIssue(link);
@@ -296,6 +308,7 @@ export class Sync {
       log.info('tracker.trashed_skip', { key: issue.key, fields: Object.keys(change) });
       return;
     }
+    const reason = `synced from GitHub issue ${ref(link.repo, link.number)}`;
     const patch: Parameters<Tracker['updateIssue']>[1] = {};
     if (change.title !== undefined) patch.title = change.title;
     if (change.body !== undefined) patch.description = change.body;
@@ -304,9 +317,14 @@ export class Sync {
       if (status !== issue.statusId) patch.status = status;
     }
     if (change.labels !== undefined)
-      patch.labels = await tracker.ensureLabels(issue.projectId, change.labels, labelColors(gh));
+      patch.labels = await tracker.ensureLabels(
+        issue.projectId,
+        change.labels,
+        labelColors(gh),
+        reason,
+      );
     if (Object.keys(patch).length > 0) {
-      await tracker.updateIssue(issue.id, patch);
+      await tracker.updateIssue(issue.id, patch, reason);
       log.info('tracker.updated', { key: issue.key, fields: Object.keys(patch) });
     }
     store.saveIssue({ ...link, url: gh.html_url, snapshot: next });
@@ -322,7 +340,10 @@ export class Sync {
     if (p.action === 'deleted') {
       if (existing?.origin === 'github') {
         try {
-          await tracker.deleteComment(existing.trackerId);
+          await tracker.deleteComment(
+            existing.trackerId,
+            `comment deleted on GitHub issue ${ref(repo, p.issue.number)}`,
+          );
         } catch (error) {
           if (!isNotFound(error)) throw error;
         }
@@ -357,6 +378,7 @@ export class Sync {
         link.trackerId,
         trackerCommentBody(comment, login),
         `github-sync:comment:${repo.toLowerCase()}:${comment.id}`,
+        `synced from a comment on GitHub issue ${ref(repo, link.number)}`,
       );
       store.saveComment({
         repo,
@@ -370,17 +392,25 @@ export class Sync {
       return;
     }
     if (existing.origin === 'github' && existing.body !== body) {
-      await tracker.updateComment(existing.trackerId, trackerCommentBody(comment, login));
+      await tracker.updateComment(
+        existing.trackerId,
+        trackerCommentBody(comment, login),
+        `synced from a comment on GitHub issue ${ref(repo, link.number)}`,
+      );
       store.saveComment({ ...existing, body });
     }
   }
 
   // ------------------------------------------------------------------ tracker → GitHub
 
-  /** Handles one tracker event. The sync's own events, and anything it does not follow, are ignored. */
+  /**
+   * Handles one tracker event. The sync's own writes (by actor, which the tracker sets from the verified token, so
+   * no one else can claim it) and anything it does not follow are ignored. An echo that slips past that check, such
+   * as a write the sync made under another identity, still matches the snapshot and changes nothing.
+   */
   onTracker(event: TrackerEvent): Promise<void> {
     return this.#serial(async () => {
-      if (event.actorId === this.#o.selfId) return;
+      if (isOwnWrite(event, { userId: this.#o.selfId })) return;
       const [kind] = event.type.split('.');
       if (kind === 'project' || kind === 'label' || kind === 'status') {
         this.#o.tracker.invalidate(event.projectId ?? undefined);
@@ -443,9 +473,11 @@ export class Sync {
     const link = this.#newLink(repo, gh, issue, { ...snapshot, state: 'open' });
     store.saveIssue(link);
     log.info('github.created', { key: issue.key, repo, number: gh.number });
-    await tracker.updateIssue(issue.id, {
-      metadata: { ...issue.metadata, [GITHUB_URL_KEY]: gh.html_url },
-    });
+    await tracker.updateIssue(
+      issue.id,
+      { metadata: { ...issue.metadata, [GITHUB_URL_KEY]: gh.html_url } },
+      `mirrored to GitHub issue ${ref(repo, gh.number)}`,
+    );
     return link;
   }
 
